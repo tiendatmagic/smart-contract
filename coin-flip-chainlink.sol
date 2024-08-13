@@ -18,6 +18,7 @@ contract CoinFlipGame is VRFConsumerBaseV2Plus {
     );
     event HouseFeeUpdated(uint256 newFeePercentage);
     event MaxBetAmountUpdated(uint256 newMaxBetAmount);
+    event MinBetAmountUpdated(uint256 newMinBetAmount);
     event ReferralBonusUpdated(uint256 newReferralBonusPercentage);
     event BalanceWithdrawn(address owner, uint256 amount);
 
@@ -41,7 +42,8 @@ contract CoinFlipGame is VRFConsumerBaseV2Plus {
     uint256 public lastRequestId;
 
     uint256 public houseFeePercentage; // Fee percentage (0-100)
-    uint256 public maxBetAmount = 100000000000000000000; // Maximum bet amount allowed
+    uint256 public maxBetAmount;
+    uint256 public minBetAmount;
     uint256 public referralBonusPercentage = 5;
     IERC20 public bettingToken;
 
@@ -65,7 +67,10 @@ contract CoinFlipGame is VRFConsumerBaseV2Plus {
         uint256 choice, // Choice of 0 or 1
         address referral // Referral address
     ) external returns (uint256 requestId) {
-        require(betAmount > 0, "Bet amount must be greater than 0");
+        require(
+            betAmount >= minBetAmount,
+            "Bet amount must be greater than or equal to the minimum bet amount"
+        );
         require(choice == 0 || choice == 1, "Choice must be 0 or 1");
         require(
             betAmount <= maxBetAmount,
@@ -176,6 +181,12 @@ contract CoinFlipGame is VRFConsumerBaseV2Plus {
         require(_maxBetAmount > 0, "Max bet amount must be greater than 0");
         maxBetAmount = _maxBetAmount;
         emit MaxBetAmountUpdated(_maxBetAmount);
+    }
+
+    function setMinBetAmount(uint256 _minBetAmount) external onlyOwner {
+        require(_minBetAmount > 0, "Minimum bet amount must be greater than 0");
+        minBetAmount = _minBetAmount;
+        emit MinBetAmountUpdated(_minBetAmount);
     }
 
     function setReferralBonusPercentage(
