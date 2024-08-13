@@ -13,7 +13,8 @@ contract CoinFlipGame is VRFConsumerBaseV2Plus {
         uint256 requestId,
         address bettor,
         uint256 betAmount,
-        uint256 choice
+        uint256 choice,
+        address referral
     );
     event HouseFeeUpdated(uint256 newFeePercentage);
     event MaxBetAmountUpdated(uint256 newMaxBetAmount);
@@ -23,6 +24,7 @@ contract CoinFlipGame is VRFConsumerBaseV2Plus {
         address bettor;
         uint256 betAmount;
         uint256 choice; // Choice of 0 or 1
+        address referral; // Referral address
     }
 
     struct RequestStatus {
@@ -58,7 +60,8 @@ contract CoinFlipGame is VRFConsumerBaseV2Plus {
 
     function placeBet(
         uint256 betAmount, // Amount of the bet
-        uint256 choice // Choice of 0 or 1
+        uint256 choice, // Choice of 0 or 1
+        address referral // Referral address
     ) external returns (uint256 requestId) {
         require(betAmount > 0, "Bet amount must be greater than 0");
         require(choice == 0 || choice == 1, "Choice must be 0 or 1");
@@ -96,12 +99,17 @@ contract CoinFlipGame is VRFConsumerBaseV2Plus {
             result: 0,
             exists: true,
             fulfilled: false,
-            bet: Bet({bettor: msg.sender, betAmount: betAmount, choice: choice})
+            bet: Bet({
+                bettor: msg.sender,
+                betAmount: betAmount,
+                choice: choice,
+                referral: referral
+            })
         });
         requestIds.push(requestId);
         lastRequestId = requestId;
         emit RequestSent(requestId, numWords);
-        emit BetPlaced(requestId, msg.sender, betAmount, choice);
+        emit BetPlaced(requestId, msg.sender, betAmount, choice, referral);
         return requestId;
     }
 
@@ -134,6 +142,17 @@ contract CoinFlipGame is VRFConsumerBaseV2Plus {
             // Player wins
             uint256 fee = (betAmount * houseFeePercentage) / 100;
             uint256 payoutAmount = (betAmount * 2) - fee;
+
+            // If there is a valid referral address, give 0.5% extra to both
+            if (bet.referral != address(0)) {
+                uint256 referralBonus = (betAmount * 5) / 1000; // 0.5%
+                payoutAmount += referralBonus;
+                require(
+                    bettingToken.transfer(bet.referral, referralBonus),
+                    "Referral bonus transfer failed"
+                );
+            }
+
             require(
                 bettingToken.transfer(bet.bettor, payoutAmount),
                 "Token transfer failed"
