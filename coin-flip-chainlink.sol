@@ -18,20 +18,21 @@ contract CoinFlipGame is VRFConsumerBaseV2Plus {
     );
     event HouseFeeUpdated(uint256 newFeePercentage);
     event MaxBetAmountUpdated(uint256 newMaxBetAmount);
+    event ReferralBonusUpdated(uint256 newReferralBonusPercentage);
     event BalanceWithdrawn(address owner, uint256 amount);
 
     struct Bet {
         address bettor;
         uint256 betAmount;
-        uint256 choice; // Choice of 0 or 1
-        address referral; // Referral address
+        uint256 choice;
+        address referral;
     }
 
     struct RequestStatus {
         bool fulfilled;
         bool exists;
-        uint256 result; // Storing the result (0 or 1)
-        Bet bet; // Store bet details
+        uint256 result;
+        Bet bet;
     }
     mapping(uint256 => RequestStatus) public s_requests;
 
@@ -40,7 +41,8 @@ contract CoinFlipGame is VRFConsumerBaseV2Plus {
     uint256 public lastRequestId;
 
     uint256 public houseFeePercentage; // Fee percentage (0-100)
-    uint256 public maxBetAmount; // Maximum bet amount allowed
+    uint256 public maxBetAmount = 100000000000000000000; // Maximum bet amount allowed
+    uint256 public referralBonusPercentage = 5;
     IERC20 public bettingToken;
 
     bytes32 public keyHash =
@@ -143,9 +145,10 @@ contract CoinFlipGame is VRFConsumerBaseV2Plus {
             uint256 fee = (betAmount * houseFeePercentage) / 100;
             uint256 payoutAmount = (betAmount * 2) - fee;
 
-            // If there is a valid referral address, give 0.5% extra to both
+            // If there is a valid referral address, give extra to both
             if (bet.referral != address(0)) {
-                uint256 referralBonus = (betAmount * 5) / 1000; // 0.5%
+                uint256 referralBonus = (betAmount * referralBonusPercentage) /
+                    1000; // Adjustable percentage
                 payoutAmount += referralBonus;
                 require(
                     bettingToken.transfer(bet.referral, referralBonus),
@@ -173,6 +176,17 @@ contract CoinFlipGame is VRFConsumerBaseV2Plus {
         require(_maxBetAmount > 0, "Max bet amount must be greater than 0");
         maxBetAmount = _maxBetAmount;
         emit MaxBetAmountUpdated(_maxBetAmount);
+    }
+
+    function setReferralBonusPercentage(
+        uint256 _bonusPercentage
+    ) external onlyOwner {
+        require(
+            _bonusPercentage >= 0 && _bonusPercentage <= 100,
+            "Invalid bonus percentage"
+        );
+        referralBonusPercentage = _bonusPercentage;
+        emit ReferralBonusUpdated(_bonusPercentage);
     }
 
     function setToken(IERC20 _token) external onlyOwner {
