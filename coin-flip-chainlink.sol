@@ -5,11 +5,16 @@ import {VRFConsumerBaseV2Plus} from "@chainlink/contracts@1.2.0/src/v0.8/vrf/dev
 import {VRFV2PlusClient} from "@chainlink/contracts@1.2.0/src/v0.8/vrf/dev/libraries/VRFV2PlusClient.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
-contract CoinFlipConsumer is VRFConsumerBaseV2Plus {
+contract CoinFlipGame is VRFConsumerBaseV2Plus {
     event RequestSent(uint256 requestId, uint32 numWords);
     event RequestFulfilled(uint256 requestId, uint256[] randomWords);
     event CoinFlipResult(uint256 requestId, uint256 result);
-    event BetPlaced(uint256 requestId, address bettor, uint256 betAmount, uint256 choice);
+    event BetPlaced(
+        uint256 requestId,
+        address bettor,
+        uint256 betAmount,
+        uint256 choice
+    );
     event HouseFeeUpdated(uint256 newFeePercentage);
     event MaxBetAmountUpdated(uint256 newMaxBetAmount);
     event BalanceWithdrawn(address owner, uint256 amount);
@@ -31,10 +36,10 @@ contract CoinFlipConsumer is VRFConsumerBaseV2Plus {
     uint256 public s_subscriptionId;
     uint256[] public requestIds;
     uint256 public lastRequestId;
-    
+
     uint256 public houseFeePercentage; // Fee percentage (0-100)
     uint256 public maxBetAmount; // Maximum bet amount allowed
-    IERC20 public bettingToken; 
+    IERC20 public bettingToken;
 
     bytes32 public keyHash =
         0x8596b430971ac45bdf6088665b9ad8e8630c9d5049ab54b14dff711bee7c0e26;
@@ -57,14 +62,22 @@ contract CoinFlipConsumer is VRFConsumerBaseV2Plus {
     ) external returns (uint256 requestId) {
         require(betAmount > 0, "Bet amount must be greater than 0");
         require(choice == 0 || choice == 1, "Choice must be 0 or 1");
-        require(betAmount <= maxBetAmount, "Bet amount exceeds the maximum limit");
+        require(
+            betAmount <= maxBetAmount,
+            "Bet amount exceeds the maximum limit"
+        );
 
-        // Calculate the potential payout (betAmount * 2) and check if the contract has enough tokens to cover it
         uint256 potentialPayout = (betAmount * 2);
-        require(bettingToken.balanceOf(address(this)) >= potentialPayout, "Contract balance is too low to cover the bet");
+        require(
+            bettingToken.balanceOf(address(this)) >= potentialPayout,
+            "Contract balance is too low to cover the bet"
+        );
 
         // Transfer tokens from the bettor to the contract
-        require(bettingToken.transferFrom(msg.sender, address(this), betAmount), "Token transfer failed");
+        require(
+            bettingToken.transferFrom(msg.sender, address(this), betAmount),
+            "Token transfer failed"
+        );
 
         // Request random words from Chainlink VRF
         requestId = s_vrfCoordinator.requestRandomWords(
@@ -75,9 +88,7 @@ contract CoinFlipConsumer is VRFConsumerBaseV2Plus {
                 callbackGasLimit: callbackGasLimit,
                 numWords: numWords,
                 extraArgs: VRFV2PlusClient._argsToBytes(
-                    VRFV2PlusClient.ExtraArgsV1({
-                        nativePayment: false
-                    })
+                    VRFV2PlusClient.ExtraArgsV1({nativePayment: false})
                 )
             })
         );
@@ -85,11 +96,7 @@ contract CoinFlipConsumer is VRFConsumerBaseV2Plus {
             result: 0,
             exists: true,
             fulfilled: false,
-            bet: Bet({
-                bettor: msg.sender,
-                betAmount: betAmount,
-                choice: choice
-            })
+            bet: Bet({bettor: msg.sender, betAmount: betAmount, choice: choice})
         });
         requestIds.push(requestId);
         lastRequestId = requestId;
@@ -122,17 +129,23 @@ contract CoinFlipConsumer is VRFConsumerBaseV2Plus {
 
         Bet memory bet = request.bet;
         uint256 betAmount = bet.betAmount;
-        
+
         if (bet.choice == result) {
             // Player wins
             uint256 fee = (betAmount * houseFeePercentage) / 100;
-            uint256 payoutAmount = (betAmount * 2) - fee; 
-            require(bettingToken.transfer(bet.bettor, payoutAmount), "Token transfer failed");
+            uint256 payoutAmount = (betAmount * 2) - fee;
+            require(
+                bettingToken.transfer(bet.bettor, payoutAmount),
+                "Token transfer failed"
+            );
         }
     }
 
     function setHouseFee(uint256 _feePercentage) external onlyOwner {
-        require(_feePercentage >= 0 && _feePercentage <= 100, "Invalid fee percentage");
+        require(
+            _feePercentage >= 0 && _feePercentage <= 100,
+            "Invalid fee percentage"
+        );
         houseFeePercentage = _feePercentage;
         emit HouseFeeUpdated(_feePercentage);
     }
@@ -156,10 +169,12 @@ contract CoinFlipConsumer is VRFConsumerBaseV2Plus {
     }
 
     // Function to withdraw balance
-    function withdrawBalance() external onlyOwner {
+    function withdrawBalance(uint256 amount) external onlyOwner {
         uint256 balance = bettingToken.balanceOf(address(this));
-        require(balance > 0, "No balance to withdraw");
-        require(bettingToken.transfer(msg.sender, balance), "Withdrawal failed");
-        emit BalanceWithdrawn(msg.sender, balance);
+        require(amount > 0, "Amount must be greater than 0");
+        require(amount <= balance, "Insufficient balance in the contract");
+
+        require(bettingToken.transfer(msg.sender, amount), "Withdrawal failed");
+        emit BalanceWithdrawn(msg.sender, amount);
     }
 }
