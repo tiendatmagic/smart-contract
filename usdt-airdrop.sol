@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //Tiendatmagic
-pragma solidity ^0.7.6;
+pragma solidity ^0.8.26;
 
 interface IBEP20 {
     function totalSupply() external view returns (uint256);
@@ -18,62 +18,14 @@ interface IBEP20 {
 }
 
 contract Context {
-    constructor () { }
+    constructor () {}
 
-    function _msgSender() internal view returns (address payable) {
+    function _msgSender() internal view returns (address) {
         return msg.sender;
     }
 
-    function _msgData() internal view returns (bytes memory) {
-        this;
+    function _msgData() internal pure returns (bytes calldata) {
         return msg.data;
-    }
-}
-
-library SafeMath {
-    function add(uint256 a, uint256 b) internal pure returns (uint256) {
-        uint256 c = a + b;
-        require(c >= a, "SafeMath: addition overflow");
-        return c;
-    }
-
-    function sub(uint256 a, uint256 b) internal pure returns (uint256) {
-        return sub(a, b, "SafeMath: subtraction overflow");
-    }
-
-    function sub(uint256 a, uint256 b, string memory errorMessage) internal pure returns (uint256) {
-        require(b <= a, errorMessage);
-        uint256 c = a - b;
-        return c;
-    }
-
-    function mul(uint256 a, uint256 b) internal pure returns (uint256) {
-        if (a == 0) {
-            return 0;
-        }
-
-        uint256 c = a * b;
-        require(c / a == b, "SafeMath: multiplication overflow");
-        return c;
-    }
-
-    function div(uint256 a, uint256 b) internal pure returns (uint256) {
-        return div(a, b, "SafeMath: division by zero");
-    }
-
-    function div(uint256 a, uint256 b, string memory errorMessage) internal pure returns (uint256) {
-        require(b > 0, errorMessage);
-        uint256 c = a / b;
-        return c;
-    }
-
-    function mod(uint256 a, uint256 b) internal pure returns (uint256) {
-        return mod(a, b, "SafeMath: modulo by zero");
-    }
-
-    function mod(uint256 a, uint256 b, string memory errorMessage) internal pure returns (uint256) {
-        require(b != 0, errorMessage);
-        return a % b;
     }
 }
 
@@ -93,20 +45,11 @@ contract Ownable is Context {
     }
 
     modifier onlyOwner() {
-        require(_owner == _msgSender(), "Ownable: caller is not the owner");
+        require(owner() == _msgSender(), "Ownable: caller is not the owner");
         _;
     }
 
-    function renounceOwnership() public onlyOwner {
-        emit OwnershipTransferred(_owner, address(0));
-        _owner = address(0);
-    }
-
     function transferOwnership(address newOwner) public onlyOwner {
-        _transferOwnership(newOwner);
-    }
-
-    function _transferOwnership(address newOwner) internal {
         require(newOwner != address(0), "Ownable: new owner is the zero address");
         emit OwnershipTransferred(_owner, newOwner);
         _owner = newOwner;
@@ -114,26 +57,23 @@ contract Ownable is Context {
 }
 
 contract BEP20Token is Context, IBEP20, Ownable {
-    using SafeMath for uint256;
-
-    mapping (address => uint256) private _balances;
-    mapping (address => mapping (address => uint256)) private _allowances;
-    mapping (address => uint256) private _lastClaimTime;
-
+    mapping(address => uint256) private _balances;
+    mapping(address => mapping(address => uint256)) private _allowances;
+    mapping(address => uint256) private _lastClaimTime;
+    
     uint256 private _totalSupply;
     uint8 private _decimals;
     string private _symbol;
     string private _name;
-
-    uint256 private constant CLAIM_AMOUNT = 10000 * 10**18;
-    uint256 private constant CLAIM_INTERVAL = 30 minutes;
+    uint256 private _claimInterval;
 
     constructor() {
         _name = "USDT Token";
         _symbol = "USDT";
         _decimals = 18;
-        _totalSupply = 100000000 * 10**18;
+        _totalSupply = 1000000 * 10**18;
         _balances[msg.sender] = _totalSupply;
+        _claimInterval = 30;  // Default claim interval set to 30 minutes
 
         emit Transfer(address(0), msg.sender, _totalSupply);
     }
@@ -174,17 +114,17 @@ contract BEP20Token is Context, IBEP20, Ownable {
 
     function transferFrom(address sender, address recipient, uint256 amount) external override returns (bool) {
         _transfer(sender, recipient, amount);
-        _approve(sender, _msgSender(), _allowances[sender][_msgSender()].sub(amount, "BEP20: transfer amount exceeds allowance"));
+        _approve(sender, _msgSender(), _allowances[sender][_msgSender()] - amount);
         return true;
     }
 
     function increaseAllowance(address spender, uint256 addedValue) public returns (bool) {
-        _approve(_msgSender(), spender, _allowances[_msgSender()][spender].add(addedValue));
+        _approve(_msgSender(), spender, _allowances[_msgSender()][spender] + addedValue);
         return true;
     }
 
     function decreaseAllowance(address spender, uint256 subtractedValue) public returns (bool) {
-        _approve(_msgSender(), spender, _allowances[_msgSender()][spender].sub(subtractedValue, "BEP20: decreased allowance below zero"));
+        _approve(_msgSender(), spender, _allowances[_msgSender()][spender] - subtractedValue);
         return true;
     }
 
@@ -198,40 +138,56 @@ contract BEP20Token is Context, IBEP20, Ownable {
         return true;
     }
 
-    function airdrop() public returns (bool) {
-        require(block.timestamp.sub(_lastClaimTime[_msgSender()]) >= CLAIM_INTERVAL, "You can only claim once every 30 minutes");
+    function claimAirdrop() external {
+        require(block.timestamp >= _lastClaimTime[msg.sender] + _claimInterval * 1 minutes, "Airdrop: Claim not available yet");
+        
+        uint256 airdropAmount = 1000 * 10**uint256(_decimals);
+        _mint(msg.sender, airdropAmount);
+        
+        _lastClaimTime[msg.sender] = block.timestamp;
+    }
 
-        _mint(_msgSender(), CLAIM_AMOUNT);
-        _lastClaimTime[_msgSender()] = block.timestamp;
+    function setClaimInterval(uint256 intervalInMinutes) external onlyOwner {
+        _claimInterval = intervalInMinutes;
+    }
 
-        return true;
+    function getClaimInterval() external view returns (uint256) {
+        return _claimInterval;
+    }
+
+    function withdraw() external onlyOwner {
+        uint256 contractBalance = _balances[address(this)];
+        require(contractBalance > 0, "Withdraw: No tokens to withdraw");
+        _transfer(address(this), _msgSender(), contractBalance);
     }
 
     function _transfer(address sender, address recipient, uint256 amount) internal {
         require(sender != address(0), "BEP20: transfer from the zero address");
         require(recipient != address(0), "BEP20: transfer to the zero address");
 
-        _balances[sender] = _balances[sender].sub(amount, "BEP20: transfer amount exceeds balance");
-        _balances[recipient] = _balances[recipient].add(amount);
+        uint256 senderBalance = _balances[sender];
+        require(senderBalance >= amount, "BEP20: transfer amount exceeds balance");
+        _balances[sender] = senderBalance - amount;
+        _balances[recipient] += amount;
+
         emit Transfer(sender, recipient, amount);
     }
 
     function _mint(address account, uint256 amount) internal {
         require(account != address(0), "BEP20: mint to the zero address");
 
-        _totalSupply = _totalSupply.add(amount);
-        _balances[account] = _balances[account].add(amount);
+        _totalSupply += amount;
+        _balances[account] += amount;
         emit Transfer(address(0), account, amount);
     }
 
-    function _burn(address account, uint256 amount) internal virtual {
-        require(account != address(0), "ERC20: burn from the zero address");
+    function _burn(address account, uint256 amount) internal {
+        require(account != address(0), "BEP20: burn from the zero address");
 
         uint256 accountBalance = _balances[account];
-        require(accountBalance >= amount, "ERC20: burn amount exceeds balance");
-
-        _balances[account] = accountBalance.sub(amount);
-        _totalSupply = _totalSupply.sub(amount);
+        require(accountBalance >= amount, "BEP20: burn amount exceeds balance");
+        _balances[account] = accountBalance - amount;
+        _totalSupply -= amount;
 
         emit Transfer(account, address(0), amount);
     }
@@ -246,7 +202,7 @@ contract BEP20Token is Context, IBEP20, Ownable {
 
     function _burnFrom(address account, uint256 amount) internal {
         _burn(account, amount);
-        _approve(account, _msgSender(), _allowances[account][_msgSender()].sub(amount, "BEP20: burn amount exceeds allowance"));
+        _approve(account, _msgSender(), _allowances[account][_msgSender()] - amount);
     }
 }
 //Tiendatmagic
