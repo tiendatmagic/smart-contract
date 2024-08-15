@@ -168,6 +168,10 @@ contract CoinFlipGame is VRFConsumerBaseV2Plus {
         }
     }
 
+    function setSubscriptionId(uint256 newSubscriptionId) external onlyOwner {
+        s_subscriptionId = newSubscriptionId;
+    }
+
     function setHouseFee(uint256 _feePercentage) external onlyOwner {
         require(
             _feePercentage >= 0 && _feePercentage <= 100,
