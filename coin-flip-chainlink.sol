@@ -50,7 +50,7 @@ contract CoinFlipGame is VRFConsumerBaseV2Plus {
     bytes32 public keyHash =
         0x8596b430971ac45bdf6088665b9ad8e8630c9d5049ab54b14dff711bee7c0e26;
 
-    uint32 public callbackGasLimit = 250000;
+    uint32 public callbackGasLimit = 300000;
     uint16 public requestConfirmations = 3;
     uint32 public numWords = 1; // Only need one word
 
