@@ -40,7 +40,7 @@ contract CoinFlipGame is VRFConsumerBaseV2Plus {
     uint8 public houseFeePercentage; // Fee percentage (0-100)
     uint256 public maxBetAmount;
     uint256 public minBetAmount;
-    uint16 public referralBonusPercentage = 5;
+    uint16 public referralBonusPercentage = 0;
     IERC20 public bettingToken;
 
     bytes32 public keyHash =
@@ -122,33 +122,34 @@ contract CoinFlipGame is VRFConsumerBaseV2Plus {
         emit RequestFulfilled(_requestId, request.result);
     }
 
-    function handleBetResult(uint256 requestId, uint256 result) internal {
-        RequestStatus storage request = s_requests[requestId];
-        require(request.fulfilled, "Request not fulfilled");
+   function handleBetResult(uint256 requestId, uint256 result) internal {
+    RequestStatus storage request = s_requests[requestId];
+    require(request.fulfilled, "Request not fulfilled");
 
-        Bet memory bet = request.bet;
-        uint256 betAmount = bet.betAmount;
+    Bet memory bet = request.bet;
+    uint256 betAmount = bet.betAmount;
 
-        if (bet.choice == result) {
-            uint256 fee = (betAmount * houseFeePercentage) / 100;
-            uint256 payoutAmount = (betAmount * 2) - fee;
+    if (bet.choice == result) {
+        uint256 fee = (betAmount * houseFeePercentage) / 100;
+        uint256 payoutAmount = (betAmount * 2) - fee;
 
-            if (bet.referral != address(0)) {
-                uint256 referralBonus = (betAmount * referralBonusPercentage) /
-                    1000;
-                payoutAmount += referralBonus;
-                require(
-                    bettingToken.transfer(bet.referral, referralBonus),
-                    "Referral bonus transfer failed"
-                );
-            }
+        if (referralBonusPercentage > 0 && bet.referral != address(0)) {
+            uint256 referralBonus = (betAmount * referralBonusPercentage) / 1000;
+            payoutAmount += referralBonus;
+            require(
+                bettingToken.transfer(bet.referral, referralBonus),
+                "Referral bonus transfer failed"
+            );
+        }
 
             require(
                 bettingToken.transfer(bet.bettor, payoutAmount),
                 "Token transfer failed"
             );
-        }
+        
     }
+}
+
 
     function setSubscriptionId(uint256 newSubscriptionId) external onlyOwner {
         s_subscriptionId = newSubscriptionId;
