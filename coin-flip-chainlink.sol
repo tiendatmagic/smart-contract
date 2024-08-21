@@ -122,34 +122,33 @@ contract CoinFlipGame is VRFConsumerBaseV2Plus {
         emit RequestFulfilled(_requestId, request.result);
     }
 
-   function handleBetResult(uint256 requestId, uint256 result) internal {
-    RequestStatus storage request = s_requests[requestId];
-    require(request.fulfilled, "Request not fulfilled");
+    function handleBetResult(uint256 requestId, uint256 result) internal {
+        RequestStatus storage request = s_requests[requestId];
+        require(request.fulfilled, "Request not fulfilled");
 
-    Bet memory bet = request.bet;
-    uint256 betAmount = bet.betAmount;
+        Bet memory bet = request.bet;
+        uint256 betAmount = bet.betAmount;
 
-    if (bet.choice == result) {
-        uint256 fee = (betAmount * houseFeePercentage) / 100;
-        uint256 payoutAmount = (betAmount * 2) - fee;
+        if (bet.choice == result) {
+            uint256 fee = (betAmount * houseFeePercentage) / 100;
+            uint256 payoutAmount = (betAmount * 2) - fee;
 
-        if (referralBonusPercentage > 0 && bet.referral != address(0)) {
-            uint256 referralBonus = (betAmount * referralBonusPercentage) / 1000;
-            payoutAmount += referralBonus;
-            require(
-                bettingToken.transfer(bet.referral, referralBonus),
-                "Referral bonus transfer failed"
-            );
-        }
+            if (referralBonusPercentage > 0 && bet.referral != address(0)) {
+                uint256 referralBonus = (betAmount * referralBonusPercentage) /
+                    1000;
+                payoutAmount += referralBonus;
+                require(
+                    bettingToken.transfer(bet.referral, referralBonus),
+                    "Referral bonus transfer failed"
+                );
+            }
 
             require(
                 bettingToken.transfer(bet.bettor, payoutAmount),
                 "Token transfer failed"
             );
-        
+        }
     }
-}
-
 
     function setSubscriptionId(uint256 newSubscriptionId) external onlyOwner {
         s_subscriptionId = newSubscriptionId;
@@ -197,5 +196,25 @@ contract CoinFlipGame is VRFConsumerBaseV2Plus {
         require(amount > 0 && amount <= balance, "Invalid amount");
         require(bettingToken.transfer(msg.sender, amount), "Withdrawal failed");
         emit BalanceWithdrawn(msg.sender, amount);
+    }
+
+    function withdrawToken(
+        uint256 amount,
+        address tokenAddress
+    ) external onlyOwner {
+        IERC20 token = IERC20(tokenAddress);
+        uint256 balance = token.balanceOf(address(this));
+        require(amount > 0 && amount <= balance, "Invalid amount");
+        require(token.transfer(msg.sender, amount), "Withdrawal failed");
+        emit BalanceWithdrawn(msg.sender, amount);
+    }
+
+    function withdrawNative(uint256 amount) external onlyOwner {
+        require(
+            amount > 0 && amount <= address(this).balance,
+            "Invalid amount"
+        );
+        (bool success, ) = msg.sender.call{value: amount}("");
+        require(success, "Withdrawal failed");
     }
 }
