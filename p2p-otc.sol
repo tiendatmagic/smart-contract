@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-// BEP20 Token Interface
-interface IBEP20 {
+// ERC20 Token Interface
+interface IERC20 {
     function transferFrom(address sender, address recipient, uint256 amount) external returns (bool);
     function transfer(address recipient, uint256 amount) external returns (bool);
     function approve(address spender, uint256 amount) external returns (bool);
@@ -10,7 +10,9 @@ interface IBEP20 {
 }
 
 contract P2POTC {
-    IBEP20 public usdtToken;
+    IERC20 public bettingToken;
+    address public owner;          // Address of the contract owner
+    uint256 private orderIdCounter; // Counter for generating unique order IDs
 
     // Enum to represent the different statuses of an order
     enum OrderStatus { Open, Processing, Completed, Cancelled, RefundRequested }
@@ -26,9 +28,6 @@ contract P2POTC {
         uint256 confirmedAt;    // Timestamp when the order was confirmed by the buyer
     }
 
-    address public owner;          // Address of the contract owner
-    uint256 private orderIdCounter; // Counter for generating unique order IDs
-
     mapping(uint256 => Order) private orders; // Mapping from order ID to Order struct
 
     // Events to log actions performed on orders
@@ -38,6 +37,8 @@ contract P2POTC {
     event OrderCompleted(uint256 orderId, address buyer);
     event OrderCompletedByAdmin(uint256 orderId, address buyer);
     event OrderCancelledByAdmin(uint256 orderId);
+    event TokenUpdated(address newToken);
+    event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
 
     // Modifier to restrict access to only the contract owner
     modifier onlyOwner() {
@@ -46,8 +47,8 @@ contract P2POTC {
     }
 
     // Constructor to initialize the contract with the USDT token address
-    constructor(address _usdtToken) {
-        usdtToken = IBEP20(_usdtToken);
+    constructor(address _bettingToken) {
+        bettingToken = IERC20(_bettingToken);
         owner = msg.sender;
         orderIdCounter = 0; // Start order ID counter from 0
     }
@@ -69,7 +70,7 @@ contract P2POTC {
         });
 
         // Transfer USDT from seller to the contract for security
-        require(usdtToken.transferFrom(msg.sender, address(this), _amount), "Transfer failed");
+        require(bettingToken.transferFrom(msg.sender, address(this), _amount), "Transfer failed");
 
         emit OrderCreated(orderId, msg.sender, _amount, _price);
     }
@@ -81,7 +82,7 @@ contract P2POTC {
         require(order.status == OrderStatus.Open, "Order not open");
         
         // Return USDT to seller if order is cancelled
-        require(usdtToken.transfer(order.seller, order.amount), "Transfer failed");
+        require(bettingToken.transfer(order.seller, order.amount), "Transfer failed");
 
         order.status = OrderStatus.Cancelled;
         emit OrderCancelled(_orderId);
@@ -94,7 +95,7 @@ contract P2POTC {
         require(order.confirmedAt != 0, "Order not confirmed");
 
         // Return USDT to seller if order is cancelled by admin
-        require(usdtToken.transfer(order.seller, order.amount), "Transfer failed");
+        require(bettingToken.transfer(order.seller, order.amount), "Transfer failed");
 
         order.status = OrderStatus.Cancelled;
         emit OrderCancelledByAdmin(_orderId);
@@ -131,7 +132,7 @@ contract P2POTC {
         require(order.status == OrderStatus.Processing, "Order not processing");
 
         // Transfer USDT to the buyer
-        require(usdtToken.transfer(order.buyer, order.amount), "Transfer failed");
+        require(bettingToken.transfer(order.buyer, order.amount), "Transfer failed");
 
         order.status = OrderStatus.Completed;
         emit OrderCompleted(_orderId, order.buyer);
@@ -143,22 +144,36 @@ contract P2POTC {
         require(order.status == OrderStatus.Processing, "Order not processing");
 
         // Complete the order and transfer USDT to the buyer if the seller does not complete it in time
-        require(usdtToken.transfer(order.buyer, order.amount), "Transfer failed");
+        require(bettingToken.transfer(order.buyer, order.amount), "Transfer failed");
         order.status = OrderStatus.Completed;
         emit OrderCompletedByAdmin(_orderId, order.buyer);
     }
 
     // Function to withdraw USDT from the contract to the owner's address
     function withdraw(uint256 _amount) external onlyOwner {
-        require(usdtToken.balanceOf(address(this)) >= _amount, "Insufficient balance");
-        require(usdtToken.transfer(owner, _amount), "Transfer failed");
+        require(bettingToken.balanceOf(address(this)) >= _amount, "Insufficient balance");
+        require(bettingToken.transfer(owner, _amount), "Transfer failed");
     }
 
     // Function to withdraw any token from the contract to the owner's address
     function withdrawToken(address _token, uint256 _amount) external onlyOwner {
-        IBEP20 token = IBEP20(_token);
+        IERC20 token = IERC20(_token);
         require(token.balanceOf(address(this)) >= _amount, "Insufficient balance");
         require(token.transfer(owner, _amount), "Transfer failed");
+    }
+
+    // Function to set a new token address
+    function setToken(address _newToken) external onlyOwner {
+        require(_newToken != address(0), "Invalid token address");
+        bettingToken = IERC20(_newToken);
+        emit TokenUpdated(_newToken);
+    }
+
+    // Function to transfer ownership of the contract
+    function transferOwnership(address _newOwner) external onlyOwner {
+        require(_newOwner != address(0), "New owner is the zero address");
+        emit OwnershipTransferred(owner, _newOwner);
+        owner = _newOwner;
     }
 
     // Function to get the details of an order
