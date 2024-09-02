@@ -11,26 +11,29 @@ interface IERC20 {
 
 contract P2POTC {
     IERC20 public bettingToken;
-    address public owner;          // Address of the contract owner
-    uint256 private orderIdCounter; // Counter for generating unique order IDs
+    address public owner;
+    uint256 private orderIdCounter;
+    uint256 public platformFeePercentage = 500; // 5% platform fee by default
+    address public platformFeeRecipient; // Address to receive platform fees
 
     // Enum to represent the different statuses of an order
     enum OrderStatus { Open, Processing, Completed, Cancelled, RefundRequested }
 
     // Struct to represent an order
     struct Order {
-        address seller;         // Address of the seller
-        address buyer;          // Address of the buyer
-        uint256 amount;         // Amount of tokens in the order
-        uint256 price;          // Price of the order in tokens
-        OrderStatus status;     // Current status of the order
-        uint256 createdAt;      // Timestamp when the order was created
-        uint256 confirmedAt;    // Timestamp when the order was confirmed by the buyer
+        address seller;
+        address buyer;
+        uint256 fullAmount; // Full amount provided by the seller
+        uint256 netAmount;  // Amount after fee deduction (used for buyer transfer)
+        uint256 price;
+        OrderStatus status;
+        uint256 createdAt;
+        uint256 confirmedAt;
     }
 
-    mapping(uint256 => Order) private orders; // Mapping from order ID to Order struct
+    mapping(uint256 => Order) private orders;
 
-    // Events to log actions performed on orders
+    // Events
     event OrderCreated(uint256 orderId, address seller, uint256 amount, uint256 price);
     event OrderCancelled(uint256 orderId);
     event OrderProcessing(uint256 orderId);
@@ -39,6 +42,8 @@ contract P2POTC {
     event OrderCancelledByAdmin(uint256 orderId);
     event TokenUpdated(address newToken);
     event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
+    event PlatformFeeUpdated(uint256 newFeePercentage);
+    event PlatformFeeRecipientUpdated(address newRecipient);
 
     // Modifier to restrict access to only the contract owner
     modifier onlyOwner() {
@@ -46,11 +51,11 @@ contract P2POTC {
         _;
     }
 
-    // Constructor to initialize the contract with the USDT token address
+    // Constructor to initialize the contract with the ERC20 token address
     constructor(address _bettingToken) {
         bettingToken = IERC20(_bettingToken);
         owner = msg.sender;
-        orderIdCounter = 0; // Start order ID counter from 0
+        orderIdCounter = 0;
     }
 
     // Function to create a new order
@@ -59,17 +64,21 @@ contract P2POTC {
         require(_price > 0, "Price must be greater than 0");
 
         uint256 orderId = orderIdCounter++;
+        uint256 platformFee = (_amount * platformFeePercentage) / 10000;
+        uint256 netAmount = _amount - platformFee;
+
         orders[orderId] = Order({
             seller: msg.sender,
-            buyer: address(0), // No buyer at the time of order creation
-            amount: _amount,
+            buyer: address(0),
+            fullAmount: _amount,  // Store the full amount provided by the seller
+            netAmount: netAmount, // Store the net amount after fee deduction
             price: _price,
             status: OrderStatus.Open,
             createdAt: block.timestamp,
             confirmedAt: 0
         });
 
-        // Transfer USDT from seller to the contract for security
+        // Transfer tokens from seller to the contract for security
         require(bettingToken.transferFrom(msg.sender, address(this), _amount), "Transfer failed");
 
         emit OrderCreated(orderId, msg.sender, _amount, _price);
@@ -81,8 +90,8 @@ contract P2POTC {
         require(order.seller == msg.sender, "Not the seller");
         require(order.status == OrderStatus.Open, "Order not open");
         
-        // Return USDT to seller if order is cancelled
-        require(bettingToken.transfer(order.seller, order.amount), "Transfer failed");
+        // Refund the full amount to the seller
+        require(bettingToken.transfer(order.seller, order.fullAmount), "Transfer failed");
 
         order.status = OrderStatus.Cancelled;
         emit OrderCancelled(_orderId);
@@ -94,8 +103,7 @@ contract P2POTC {
         require(order.status == OrderStatus.Processing, "Order not processing");
         require(order.confirmedAt != 0, "Order not confirmed");
 
-        // Return USDT to seller if order is cancelled by admin
-        require(bettingToken.transfer(order.seller, order.amount), "Transfer failed");
+        require(bettingToken.transfer(order.seller, order.fullAmount), "Transfer failed");
 
         order.status = OrderStatus.Cancelled;
         emit OrderCancelledByAdmin(_orderId);
@@ -104,24 +112,15 @@ contract P2POTC {
     // Function for the buyer to confirm an order
     function confirmOrder(uint256 _orderId) external {
         Order storage order = orders[_orderId];
-        
-        // Check if the order has already been confirmed
         require(order.confirmedAt == 0, "Order already confirmed");
-        
-        // Check if the seller exists and is not a null address
         require(order.seller != address(0), "Seller does not exist");
-        
-        // Check if the order status is "Open"
         require(order.status == OrderStatus.Open, "Order not open");
-        
-        // Check if the buyer has not already been set
         require(order.buyer == address(0), "Buyer already exists");
-        
-        // Set the buyer for the order
+
         order.buyer = msg.sender;
         order.status = OrderStatus.Processing;
         order.confirmedAt = block.timestamp;
-        
+
         emit OrderProcessing(_orderId);
     }
 
@@ -131,8 +130,12 @@ contract P2POTC {
         require(order.seller == msg.sender, "Not the seller");
         require(order.status == OrderStatus.Processing, "Order not processing");
 
-        // Transfer USDT to the buyer
-        require(bettingToken.transfer(order.buyer, order.amount), "Transfer failed");
+        // Transfer the net amount to the buyer
+        require(bettingToken.transfer(order.buyer, order.netAmount), "Transfer failed");
+
+        // Transfer the platform fee to the designated recipient
+        uint256 platformFee = order.fullAmount - order.netAmount;
+        require(bettingToken.transfer(platformFeeRecipient, platformFee), "Transfer failed");
 
         order.status = OrderStatus.Completed;
         emit OrderCompleted(_orderId, order.buyer);
@@ -143,13 +146,18 @@ contract P2POTC {
         Order storage order = orders[_orderId];
         require(order.status == OrderStatus.Processing, "Order not processing");
 
-        // Complete the order and transfer USDT to the buyer if the seller does not complete it in time
-        require(bettingToken.transfer(order.buyer, order.amount), "Transfer failed");
+        // Transfer the net amount to the buyer
+        require(bettingToken.transfer(order.buyer, order.netAmount), "Transfer failed");
+
+        // Transfer the platform fee to the designated recipient
+        uint256 platformFee = order.fullAmount - order.netAmount;
+        require(bettingToken.transfer(platformFeeRecipient, platformFee), "Transfer failed");
+
         order.status = OrderStatus.Completed;
         emit OrderCompletedByAdmin(_orderId, order.buyer);
     }
 
-    // Function to withdraw USDT from the contract to the owner's address
+    // Function to withdraw tokens from the contract to the owner's address
     function withdraw(uint256 _amount) external onlyOwner {
         require(bettingToken.balanceOf(address(this)) >= _amount, "Insufficient balance");
         require(bettingToken.transfer(owner, _amount), "Transfer failed");
@@ -176,11 +184,25 @@ contract P2POTC {
         owner = _newOwner;
     }
 
+    // Function to set the platform fee recipient address
+    function setPlatformFeeRecipient(address _recipient) external onlyOwner {
+        require(_recipient != address(0), "Invalid address");
+        platformFeeRecipient = _recipient;
+        emit PlatformFeeRecipientUpdated(_recipient);
+    }
+
+    // Function to update the platform fee percentage
+    function setPlatformFeePercentage(uint256 _percentage) external onlyOwner {
+        require(_percentage <= 10000, "Fee percentage too high"); // Max is 100% = 10000
+        platformFeePercentage = _percentage;
+        emit PlatformFeeUpdated(_percentage);
+    }
+
     // Function to get the details of an order
     function getOrderDetails(uint256 _orderId) external view returns (
         address seller, 
         address buyer, 
-        uint256 amount, 
+        uint256 fullAmount, 
         uint256 price, 
         OrderStatus status, 
         uint256 createdAt, 
@@ -190,7 +212,7 @@ contract P2POTC {
         return (
             order.seller,
             order.buyer,
-            order.amount,
+            order.fullAmount, // Full amount, without fee deduction
             order.price,
             order.status,
             order.createdAt,
