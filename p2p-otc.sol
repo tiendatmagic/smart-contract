@@ -26,6 +26,9 @@ contract P2POTC {
     uint256 public platformFeePercentage = 50; // 5% platform fee by default
     address public platformFeeRecipient; // Address to receive platform fees
 
+    uint256 public minSellAmount;
+    uint256 public maxSellAmount;
+
     // Enum to represent the different statuses of an order
     enum OrderStatus {
         Open,
@@ -45,7 +48,7 @@ contract P2POTC {
         OrderStatus status;
         uint256 createdAt;
         uint256 confirmedAt;
-        BankDetails sellerBankDetails; 
+        BankDetails sellerBankDetails;
     }
 
     // Struct to represent seller's bank details
@@ -83,6 +86,8 @@ contract P2POTC {
         string accountNumber,
         string note
     );
+    event MinSellAmountUpdated(uint256 newMinSellAmount);
+    event MaxSellAmountUpdated(uint256 newMaxSellAmount);
 
     // Modifier to restrict access to only the contract owner
     modifier onlyOwner() {
@@ -95,12 +100,22 @@ contract P2POTC {
         bettingToken = IERC20(_bettingToken);
         owner = msg.sender;
         orderIdCounter = 0;
+        minSellAmount = 0;
+        maxSellAmount = 0;
     }
 
     // Function to create a new order
     function createOrder(uint256 _amount, uint256 _price) external {
         require(_amount > 0, "Amount must be greater than 0");
         require(_price > 0, "Price must be greater than 0");
+        require(
+            _amount >= minSellAmount,
+            "Amount must be greater than or equal to the minimum sell amount"
+        );
+        require(
+            _amount <= maxSellAmount,
+            "Amount must be less than or equal to the maximum sell amount"
+        );
 
         uint256 orderId = orderIdCounter++;
         uint256 platformFee = (_amount * platformFeePercentage) / 10000;
@@ -117,7 +132,7 @@ contract P2POTC {
             status: OrderStatus.Open,
             createdAt: block.timestamp,
             confirmedAt: 0,
-            sellerBankDetails: bankDetails // Lưu thông tin ngân hàng vào đơn hàng
+            sellerBankDetails: bankDetails
         });
 
         require(
@@ -126,6 +141,26 @@ contract P2POTC {
         );
 
         emit OrderCreated(orderId, msg.sender, _amount, _price);
+    }
+
+    // Function to set the minimum sell amount
+    function setMinSellAmount(uint256 _minSellAmount) external onlyOwner {
+        require(
+            _minSellAmount > 0,
+            "Minimum sell amount must be greater than 0"
+        );
+        minSellAmount = _minSellAmount;
+        emit MinSellAmountUpdated(_minSellAmount);
+    }
+
+    // Function to set the maximum sell amount
+    function setMaxSellAmount(uint256 _maxSellAmount) external onlyOwner {
+        require(
+            _maxSellAmount > 0,
+            "Maximum sell amount must be greater than 0"
+        );
+        maxSellAmount = _maxSellAmount;
+        emit MaxSellAmountUpdated(_maxSellAmount);
     }
 
     // Function to cancel an order by the seller
@@ -314,9 +349,9 @@ contract P2POTC {
             OrderStatus status,
             uint256 createdAt,
             uint256 confirmedAt,
-            string memory bankName, 
+            string memory bankName,
             string memory accountNumber,
-            string memory note 
+            string memory note
         )
     {
         Order storage order = orders[_orderId];
