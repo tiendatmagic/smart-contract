@@ -13,7 +13,7 @@ contract P2POTC {
     IERC20 public bettingToken;
     address public owner;
     uint256 private orderIdCounter;
-    uint256 public platformFeePercentage = 500; // 5% platform fee by default
+    uint256 public platformFeePercentage = 50; // 5% platform fee by default
     address public platformFeeRecipient; // Address to receive platform fees
 
     // Enum to represent the different statuses of an order
