@@ -3,9 +3,19 @@ pragma solidity ^0.8.0;
 
 // ERC20 Token Interface
 interface IERC20 {
-    function transferFrom(address sender, address recipient, uint256 amount) external returns (bool);
-    function transfer(address recipient, uint256 amount) external returns (bool);
+    function transferFrom(
+        address sender,
+        address recipient,
+        uint256 amount
+    ) external returns (bool);
+
+    function transfer(
+        address recipient,
+        uint256 amount
+    ) external returns (bool);
+
     function approve(address spender, uint256 amount) external returns (bool);
+
     function balanceOf(address account) external view returns (uint256);
 }
 
@@ -17,33 +27,62 @@ contract P2POTC {
     address public platformFeeRecipient; // Address to receive platform fees
 
     // Enum to represent the different statuses of an order
-    enum OrderStatus { Open, Processing, Completed, Cancelled, RefundRequested }
+    enum OrderStatus {
+        Open,
+        Processing,
+        Completed,
+        Cancelled,
+        RefundRequested
+    }
 
     // Struct to represent an order
     struct Order {
         address seller;
         address buyer;
-        uint256 fullAmount; // Full amount provided by the seller
-        uint256 netAmount;  // Amount after fee deduction (used for buyer transfer)
+        uint256 fullAmount;
+        uint256 netAmount;
         uint256 price;
         OrderStatus status;
         uint256 createdAt;
         uint256 confirmedAt;
+        BankDetails sellerBankDetails; 
+    }
+
+    // Struct to represent seller's bank details
+    struct BankDetails {
+        string bankName;
+        string accountNumber;
+        string note;
     }
 
     mapping(uint256 => Order) private orders;
+    mapping(address => BankDetails) private sellerBankDetails;
 
     // Events
-    event OrderCreated(uint256 orderId, address seller, uint256 amount, uint256 price);
+    event OrderCreated(
+        uint256 orderId,
+        address seller,
+        uint256 amount,
+        uint256 price
+    );
     event OrderCancelled(uint256 orderId);
     event OrderProcessing(uint256 orderId);
     event OrderCompleted(uint256 orderId, address buyer);
     event OrderCompletedByAdmin(uint256 orderId, address buyer);
     event OrderCancelledByAdmin(uint256 orderId);
     event TokenUpdated(address newToken);
-    event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
+    event OwnershipTransferred(
+        address indexed previousOwner,
+        address indexed newOwner
+    );
     event PlatformFeeUpdated(uint256 newFeePercentage);
     event PlatformFeeRecipientUpdated(address newRecipient);
+    event BankDetailsUpdated(
+        address seller,
+        string bankName,
+        string accountNumber,
+        string note
+    );
 
     // Modifier to restrict access to only the contract owner
     modifier onlyOwner() {
@@ -67,19 +106,24 @@ contract P2POTC {
         uint256 platformFee = (_amount * platformFeePercentage) / 10000;
         uint256 netAmount = _amount - platformFee;
 
+        BankDetails memory bankDetails = sellerBankDetails[msg.sender];
+
         orders[orderId] = Order({
             seller: msg.sender,
             buyer: address(0),
-            fullAmount: _amount,  // Store the full amount provided by the seller
-            netAmount: netAmount, // Store the net amount after fee deduction
+            fullAmount: _amount,
+            netAmount: netAmount,
             price: _price,
             status: OrderStatus.Open,
             createdAt: block.timestamp,
-            confirmedAt: 0
+            confirmedAt: 0,
+            sellerBankDetails: bankDetails // Lưu thông tin ngân hàng vào đơn hàng
         });
 
-        // Transfer tokens from seller to the contract for security
-        require(bettingToken.transferFrom(msg.sender, address(this), _amount), "Transfer failed");
+        require(
+            bettingToken.transferFrom(msg.sender, address(this), _amount),
+            "Transfer failed"
+        );
 
         emit OrderCreated(orderId, msg.sender, _amount, _price);
     }
@@ -89,9 +133,12 @@ contract P2POTC {
         Order storage order = orders[_orderId];
         require(order.seller == msg.sender, "Not the seller");
         require(order.status == OrderStatus.Open, "Order not open");
-        
+
         // Refund the full amount to the seller
-        require(bettingToken.transfer(order.seller, order.fullAmount), "Transfer failed");
+        require(
+            bettingToken.transfer(order.seller, order.fullAmount),
+            "Transfer failed"
+        );
 
         order.status = OrderStatus.Cancelled;
         emit OrderCancelled(_orderId);
@@ -103,7 +150,10 @@ contract P2POTC {
         require(order.status == OrderStatus.Processing, "Order not processing");
         require(order.confirmedAt != 0, "Order not confirmed");
 
-        require(bettingToken.transfer(order.seller, order.fullAmount), "Transfer failed");
+        require(
+            bettingToken.transfer(order.seller, order.fullAmount),
+            "Transfer failed"
+        );
 
         order.status = OrderStatus.Cancelled;
         emit OrderCancelledByAdmin(_orderId);
@@ -131,11 +181,17 @@ contract P2POTC {
         require(order.status == OrderStatus.Processing, "Order not processing");
 
         // Transfer the net amount to the buyer
-        require(bettingToken.transfer(order.buyer, order.netAmount), "Transfer failed");
+        require(
+            bettingToken.transfer(order.buyer, order.netAmount),
+            "Transfer failed"
+        );
 
         // Transfer the platform fee to the designated recipient
         uint256 platformFee = order.fullAmount - order.netAmount;
-        require(bettingToken.transfer(platformFeeRecipient, platformFee), "Transfer failed");
+        require(
+            bettingToken.transfer(platformFeeRecipient, platformFee),
+            "Transfer failed"
+        );
 
         order.status = OrderStatus.Completed;
         emit OrderCompleted(_orderId, order.buyer);
@@ -147,11 +203,17 @@ contract P2POTC {
         require(order.status == OrderStatus.Processing, "Order not processing");
 
         // Transfer the net amount to the buyer
-        require(bettingToken.transfer(order.buyer, order.netAmount), "Transfer failed");
+        require(
+            bettingToken.transfer(order.buyer, order.netAmount),
+            "Transfer failed"
+        );
 
         // Transfer the platform fee to the designated recipient
         uint256 platformFee = order.fullAmount - order.netAmount;
-        require(bettingToken.transfer(platformFeeRecipient, platformFee), "Transfer failed");
+        require(
+            bettingToken.transfer(platformFeeRecipient, platformFee),
+            "Transfer failed"
+        );
 
         order.status = OrderStatus.Completed;
         emit OrderCompletedByAdmin(_orderId, order.buyer);
@@ -159,14 +221,20 @@ contract P2POTC {
 
     // Function to withdraw tokens from the contract to the owner's address
     function withdraw(uint256 _amount) external onlyOwner {
-        require(bettingToken.balanceOf(address(this)) >= _amount, "Insufficient balance");
+        require(
+            bettingToken.balanceOf(address(this)) >= _amount,
+            "Insufficient balance"
+        );
         require(bettingToken.transfer(owner, _amount), "Transfer failed");
     }
 
     // Function to withdraw any token from the contract to the owner's address
     function withdrawToken(address _token, uint256 _amount) external onlyOwner {
         IERC20 token = IERC20(_token);
-        require(token.balanceOf(address(this)) >= _amount, "Insufficient balance");
+        require(
+            token.balanceOf(address(this)) >= _amount,
+            "Insufficient balance"
+        );
         require(token.transfer(owner, _amount), "Transfer failed");
     }
 
@@ -193,35 +261,100 @@ contract P2POTC {
 
     // Function to update the platform fee percentage
     function setPlatformFeePercentage(uint256 _percentage) external onlyOwner {
-        require(_percentage <= 10000, "Fee percentage too high"); // Max is 100% = 10000
+        require(_percentage <= 10000, "Fee percentage too high");
         platformFeePercentage = _percentage;
         emit PlatformFeeUpdated(_percentage);
     }
 
+    // Function to set the bank details for a seller
+    function updateBankDetails(
+        string memory _bankName,
+        string memory _accountNumber,
+        string memory _note
+    ) external {
+        // Check if the seller has any open or processing orders
+        bool hasActiveOrders = false;
+        for (uint256 i = 0; i < orderIdCounter; i++) {
+            Order storage order = orders[i];
+            if (
+                order.seller == msg.sender &&
+                (order.status == OrderStatus.Open ||
+                    order.status == OrderStatus.Processing)
+            ) {
+                hasActiveOrders = true;
+                break;
+            }
+        }
+        require(
+            !hasActiveOrders,
+            "Cannot update bank details with active orders"
+        );
+
+        sellerBankDetails[msg.sender] = BankDetails({
+            bankName: _bankName,
+            accountNumber: _accountNumber,
+            note: _note
+        });
+
+        emit BankDetailsUpdated(msg.sender, _bankName, _accountNumber, _note);
+    }
+
     // Function to get the details of an order
-    function getOrderDetails(uint256 _orderId) external view returns (
-        address seller, 
-        address buyer, 
-        uint256 fullAmount, 
-        uint256 price, 
-        OrderStatus status, 
-        uint256 createdAt, 
-        uint256 confirmedAt
-    ) {
-        Order memory order = orders[_orderId];
+    function getOrderDetails(
+        uint256 _orderId
+    )
+        external
+        view
+        returns (
+            address seller,
+            address buyer,
+            uint256 fullAmount,
+            uint256 netAmount,
+            uint256 price,
+            OrderStatus status,
+            uint256 createdAt,
+            uint256 confirmedAt,
+            string memory bankName, 
+            string memory accountNumber,
+            string memory note 
+        )
+    {
+        Order storage order = orders[_orderId];
+        BankDetails memory bankDetails = order.sellerBankDetails; // Lấy thông tin ngân hàng từ đơn hàng
+
         return (
             order.seller,
             order.buyer,
-            order.fullAmount, // Full amount, without fee deduction
+            order.fullAmount,
+            order.netAmount,
             order.price,
             order.status,
             order.createdAt,
-            order.confirmedAt
+            order.confirmedAt,
+            bankDetails.bankName, // Trả về bankName
+            bankDetails.accountNumber, // Trả về accountNumber
+            bankDetails.note // Trả về note
         );
+    }
+
+    // Function to get bank details for a seller
+    function getBankDetails(
+        address _seller
+    )
+        external
+        view
+        returns (
+            string memory bankName,
+            string memory accountNumber,
+            string memory note
+        )
+    {
+        BankDetails memory details = sellerBankDetails[_seller];
+        return (details.bankName, details.accountNumber, details.note);
     }
 
     // Function to count the total number of orders created
     function countOrders() external view returns (uint256) {
-        return orderIdCounter; 
+        return orderIdCounter;
     }
 }
