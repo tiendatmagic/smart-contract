@@ -29,6 +29,9 @@ contract P2POTC {
     uint256 public minSellAmount;
     uint256 public maxSellAmount;
 
+    uint256 public minBuyAmount;
+    uint256 public maxBuyAmount;
+
     // Enum to represent the different statuses of an order
     enum OrderStatus {
         Open,
@@ -36,6 +39,11 @@ contract P2POTC {
         Completed,
         Cancelled,
         RefundRequested
+    }
+
+    enum OrderType {
+        Buy,
+        Sell
     }
 
     // Struct to represent an order
@@ -46,9 +54,10 @@ contract P2POTC {
         uint256 netAmount;
         uint256 price;
         OrderStatus status;
+        OrderType orderType;
         uint256 createdAt;
         uint256 confirmedAt;
-        BankDetails sellerBankDetails;
+        BankDetails bankDetail;
     }
 
     // Struct to represent seller's bank details
@@ -59,7 +68,7 @@ contract P2POTC {
     }
 
     mapping(uint256 => Order) private orders;
-    mapping(address => BankDetails) private sellerBankDetails;
+    mapping(address => BankDetails) private bankDetail;
 
     // Events
     event OrderCreated(
@@ -89,6 +98,9 @@ contract P2POTC {
     event MinSellAmountUpdated(uint256 newMinSellAmount);
     event MaxSellAmountUpdated(uint256 newMaxSellAmount);
 
+    event MinBuyAmountUpdated(uint256 newMinBuyAmount);
+    event MaxBuyAmountUpdated(uint256 newMaxBuyAmount);
+
     // Modifier to restrict access to only the contract owner
     modifier onlyOwner() {
         require(msg.sender == owner, "Not the owner");
@@ -102,10 +114,12 @@ contract P2POTC {
         orderIdCounter = 0;
         minSellAmount = 0;
         maxSellAmount = 0;
+        minBuyAmount = 0;
+        maxBuyAmount = 0;
     }
 
     // Function to create a new order
-    function sellerCreateOrder(uint256 _amount, uint256 _price) external {
+     function sellerCreateOrder(uint256 _amount, uint256 _price) external {
         require(_amount > 0, "Amount must be greater than 0");
         require(_price > 0, "Price must be greater than 0");
         require(
@@ -121,7 +135,8 @@ contract P2POTC {
         uint256 platformFee = (_amount * platformFeePercentage) / 10000;
         uint256 netAmount = _amount - platformFee;
 
-        BankDetails memory bankDetails = sellerBankDetails[msg.sender];
+        // Get the bank details of the seller at the time of order creation
+        BankDetails memory bankDetails = bankDetail[msg.sender];
 
         orders[orderId] = Order({
             seller: msg.sender,
@@ -130,9 +145,10 @@ contract P2POTC {
             netAmount: netAmount,
             price: _price,
             status: OrderStatus.Open,
+            orderType: OrderType.Sell,
             createdAt: block.timestamp,
             confirmedAt: 0,
-            sellerBankDetails: bankDetails
+            bankDetail: bankDetails // Store bank details at the time of order creation
         });
 
         require(
@@ -142,6 +158,7 @@ contract P2POTC {
 
         emit OrderCreated(orderId, msg.sender, _amount, _price);
     }
+
 
     // Function to set the minimum sell amount
     function setMinSellAmount(uint256 _minSellAmount) external onlyOwner {
@@ -161,6 +178,18 @@ contract P2POTC {
         );
         maxSellAmount = _maxSellAmount;
         emit MaxSellAmountUpdated(_maxSellAmount);
+    }
+
+    function setMinBuyAmount(uint256 _minBuyAmount) external onlyOwner {
+        require(_minBuyAmount > 0, "Minimum buy amount must be greater than 0");
+        minBuyAmount = _minBuyAmount;
+        emit MinBuyAmountUpdated(_minBuyAmount);
+    }
+
+    function setMaxBuyAmount(uint256 _maxBuyAmount) external onlyOwner {
+        require(_maxBuyAmount > 0, "Maximum buy amount must be greater than 0");
+        maxBuyAmount = _maxBuyAmount;
+        emit MaxBuyAmountUpdated(_maxBuyAmount);
     }
 
     // Function to cancel an order by the seller
@@ -197,9 +226,12 @@ contract P2POTC {
     // Function for the buyer to confirm an order
     function buyerConfirmOrder(uint256 _orderId) external {
         Order storage order = orders[_orderId];
+
         require(order.confirmedAt == 0, "Order already confirmed");
+        require(order.orderType == OrderType.Sell, "Not a sell order");
         require(order.seller != address(0), "Seller does not exist");
         require(order.status == OrderStatus.Open, "Order not open");
+        require(order.buyer == address(0), "Buyer already exists");
         require(order.buyer == address(0), "Buyer already exists");
 
         order.buyer = msg.sender;
@@ -252,6 +284,135 @@ contract P2POTC {
 
         order.status = OrderStatus.Completed;
         emit OrderCompletedByAdmin(_orderId, order.buyer);
+    }
+
+    function buyerCreateOrder(uint256 _amount, uint256 _price) external {
+        require(_amount > 0, "Amount must be greater than 0");
+        require(_price > 0, "Price must be greater than 0");
+
+        require(
+            _amount >= minBuyAmount,
+            "Amount must be greater than or equal to the minimum buy amount"
+        );
+        require(
+            _amount <= maxBuyAmount,
+            "Amount must be less than or equal to the maximum buy amount"
+        );
+
+        uint256 orderId = orderIdCounter++;
+        uint256 platformFee = (_amount * platformFeePercentage) / 10000;
+        uint256 netAmount = _amount - platformFee;
+
+        // Get the bank details of the buyer at the time of order creation
+        BankDetails memory bankDetails = bankDetail[msg.sender];
+
+        orders[orderId] = Order({
+            seller: address(0),
+            buyer: msg.sender,
+            fullAmount: _amount,
+            netAmount: netAmount,
+            price: _price,
+            status: OrderStatus.Open,
+            orderType: OrderType.Buy,
+            createdAt: block.timestamp,
+            confirmedAt: 0,
+            bankDetail: bankDetails // Store bank details at the time of order creation
+        });
+
+        emit OrderCreated(orderId, msg.sender, _amount, _price);
+    }
+
+    function sellerConfirmOrder(uint256 _orderId) external {
+        Order storage order = orders[_orderId];
+
+        require(order.confirmedAt == 0, "Order already confirmed");
+        require(order.orderType == OrderType.Buy, "Not a buy order");
+        require(order.buyer != address(0), "Buyer does not exist");
+        require(order.seller == address(0), "Seller already exists");
+        require(order.status == OrderStatus.Open, "Order not open");
+
+        order.seller = msg.sender;
+        order.status = OrderStatus.Processing;
+        order.confirmedAt = block.timestamp;
+
+        require(
+            bettingToken.transferFrom(
+                msg.sender,
+                address(this),
+                order.fullAmount
+            ),
+            "Transfer failed"
+        );
+
+        emit OrderProcessing(_orderId);
+    }
+
+    function buyerCompleteOrder(uint256 _orderId) external {
+        Order storage order = orders[_orderId];
+        require(order.orderType == OrderType.Buy, "Not a buy order");
+        require(order.buyer == msg.sender, "Not the buyer");
+        require(order.status == OrderStatus.Processing, "Order not processing");
+
+        // Transfer the net amount to the buyer
+        require(
+            bettingToken.transfer(msg.sender, order.netAmount),
+            "Transfer failed"
+        );
+
+        // Transfer the platform fee to the designated recipient
+        uint256 platformFee = order.fullAmount - order.netAmount;
+        require(
+            bettingToken.transfer(platformFeeRecipient, platformFee),
+            "Transfer failed"
+        );
+
+        order.status = OrderStatus.Completed;
+        emit OrderCompleted(_orderId, msg.sender);
+    }
+
+    function buyerCancelOrder(uint256 _orderId) external {
+        Order storage order = orders[_orderId];
+        require(order.buyer == msg.sender, "Not the buyer");
+        require(order.status == OrderStatus.Open, "Order not open");
+
+        order.status = OrderStatus.Cancelled;
+        emit OrderCancelled(_orderId);
+    }
+
+    function buyerCompleteOrderByAdmin(uint256 _orderId) external onlyOwner {
+        Order storage order = orders[_orderId];
+        require(order.orderType == OrderType.Buy, "Not a buy order");
+        require(order.status == OrderStatus.Processing, "Order not processing");
+
+        // Transfer the net amount to the buyer
+        require(
+            bettingToken.transfer(order.buyer, order.netAmount),
+            "Transfer failed"
+        );
+
+        // Transfer the platform fee to the designated recipient
+        uint256 platformFee = order.fullAmount - order.netAmount;
+        require(
+            bettingToken.transfer(platformFeeRecipient, platformFee),
+            "Transfer failed"
+        );
+
+        order.status = OrderStatus.Completed;
+        emit OrderCompletedByAdmin(_orderId, order.buyer);
+    }
+
+    function buyerCancelOrderByAdmin(uint256 _orderId) external onlyOwner {
+        Order storage order = orders[_orderId];
+        require(order.status == OrderStatus.Processing, "Order not processing");
+        require(order.confirmedAt != 0, "Order not confirmed");
+
+        require(
+            bettingToken.transfer(order.seller, order.fullAmount),
+            "Transfer failed"
+        );
+
+        order.status = OrderStatus.Cancelled;
+        emit OrderCancelledByAdmin(_orderId);
     }
 
     // Function to withdraw tokens from the contract to the owner's address
@@ -325,7 +486,7 @@ contract P2POTC {
             "Cannot update bank details with active orders"
         );
 
-        sellerBankDetails[msg.sender] = BankDetails({
+        bankDetail[msg.sender] = BankDetails({
             bankName: _bankName,
             accountNumber: _accountNumber,
             note: _note
@@ -347,6 +508,7 @@ contract P2POTC {
             uint256 netAmount,
             uint256 price,
             string memory status,
+            string memory orderType,
             uint256 createdAt,
             uint256 confirmedAt,
             string memory bankName,
@@ -355,9 +517,7 @@ contract P2POTC {
         )
     {
         Order storage order = orders[_orderId];
-        BankDetails memory bankDetails = order.sellerBankDetails;
 
-        // Chuyển đổi trạng thái từ enum sang chuỗi
         string memory orderStatus;
         if (order.status == OrderStatus.Open) {
             orderStatus = "Open";
@@ -371,6 +531,13 @@ contract P2POTC {
             orderStatus = "RefundRequested";
         }
 
+        string memory orderTypeStr = order.orderType == OrderType.Buy
+            ? "Buy"
+            : "Sell";
+
+        // Return the bank details stored in the order
+        BankDetails memory bankDetails = order.bankDetail;
+
         return (
             order.seller,
             order.buyer,
@@ -378,6 +545,7 @@ contract P2POTC {
             order.netAmount,
             order.price,
             orderStatus,
+            orderTypeStr,
             order.createdAt,
             order.confirmedAt,
             bankDetails.bankName,
@@ -398,7 +566,7 @@ contract P2POTC {
             string memory note
         )
     {
-        BankDetails memory details = sellerBankDetails[_seller];
+        BankDetails memory details = bankDetail[_seller];
         return (details.bankName, details.accountNumber, details.note);
     }
 
