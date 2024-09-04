@@ -105,7 +105,7 @@ contract P2POTC {
     }
 
     // Function to create a new order
-    function createOrder(uint256 _amount, uint256 _price) external {
+    function sellerCreateOrder(uint256 _amount, uint256 _price) external {
         require(_amount > 0, "Amount must be greater than 0");
         require(_price > 0, "Price must be greater than 0");
         require(
@@ -164,7 +164,7 @@ contract P2POTC {
     }
 
     // Function to cancel an order by the seller
-    function cancelOrder(uint256 _orderId) external {
+    function sellerCancelOrder(uint256 _orderId) external {
         Order storage order = orders[_orderId];
         require(order.seller == msg.sender, "Not the seller");
         require(order.status == OrderStatus.Open, "Order not open");
@@ -180,7 +180,7 @@ contract P2POTC {
     }
 
     // Function to cancel an order by the admin
-    function cancelOrderByAdmin(uint256 _orderId) external onlyOwner {
+    function sellerCancelOrderByAdmin(uint256 _orderId) external onlyOwner {
         Order storage order = orders[_orderId];
         require(order.status == OrderStatus.Processing, "Order not processing");
         require(order.confirmedAt != 0, "Order not confirmed");
@@ -195,7 +195,7 @@ contract P2POTC {
     }
 
     // Function for the buyer to confirm an order
-    function confirmOrder(uint256 _orderId) external {
+    function buyerConfirmOrder(uint256 _orderId) external {
         Order storage order = orders[_orderId];
         require(order.confirmedAt == 0, "Order already confirmed");
         require(order.seller != address(0), "Seller does not exist");
@@ -210,7 +210,7 @@ contract P2POTC {
     }
 
     // Function to complete an order by the seller
-    function completeOrder(uint256 _orderId) external {
+    function sellerCompleteOrder(uint256 _orderId) external {
         Order storage order = orders[_orderId];
         require(order.seller == msg.sender, "Not the seller");
         require(order.status == OrderStatus.Processing, "Order not processing");
@@ -233,7 +233,7 @@ contract P2POTC {
     }
 
     // Function to complete an order by the admin
-    function completeOrderByAdmin(uint256 _orderId) external onlyOwner {
+    function sellerCompleteOrderByAdmin(uint256 _orderId) external onlyOwner {
         Order storage order = orders[_orderId];
         require(order.status == OrderStatus.Processing, "Order not processing");
 
