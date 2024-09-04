@@ -346,7 +346,7 @@ contract P2POTC {
             uint256 fullAmount,
             uint256 netAmount,
             uint256 price,
-            OrderStatus status,
+            string memory status,
             uint256 createdAt,
             uint256 confirmedAt,
             string memory bankName,
@@ -355,7 +355,21 @@ contract P2POTC {
         )
     {
         Order storage order = orders[_orderId];
-        BankDetails memory bankDetails = order.sellerBankDetails; // Lấy thông tin ngân hàng từ đơn hàng
+        BankDetails memory bankDetails = order.sellerBankDetails;
+
+        // Chuyển đổi trạng thái từ enum sang chuỗi
+        string memory orderStatus;
+        if (order.status == OrderStatus.Open) {
+            orderStatus = "Open";
+        } else if (order.status == OrderStatus.Processing) {
+            orderStatus = "Processing";
+        } else if (order.status == OrderStatus.Completed) {
+            orderStatus = "Completed";
+        } else if (order.status == OrderStatus.Cancelled) {
+            orderStatus = "Cancelled";
+        } else if (order.status == OrderStatus.RefundRequested) {
+            orderStatus = "RefundRequested";
+        }
 
         return (
             order.seller,
@@ -363,12 +377,12 @@ contract P2POTC {
             order.fullAmount,
             order.netAmount,
             order.price,
-            order.status,
+            orderStatus,
             order.createdAt,
             order.confirmedAt,
-            bankDetails.bankName, // Trả về bankName
-            bankDetails.accountNumber, // Trả về accountNumber
-            bankDetails.note // Trả về note
+            bankDetails.bankName,
+            bankDetails.accountNumber,
+            bankDetails.note
         );
     }
 
