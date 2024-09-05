@@ -50,7 +50,6 @@ contract P2POTC {
         string note;
     }
 
-
     // Enum to represent the different statuses of an order
     enum OrderStatus {
         Open,
@@ -706,12 +705,13 @@ contract P2POTC {
         OrderStatus _status,
         uint256 _page
     ) external view returns (OrderDetails[] memory) {
-        uint256 start = (_page - 1) * 10;
-        uint256 end = start + 10;
+        uint256 itemsPerPage = 3; // Number of items per page
+        uint256 start = (_page - 1) * itemsPerPage;
+        uint256 end = start + itemsPerPage;
         uint256 totalOrders = orderIdCounter;
         uint256 count = 0;
 
-        // Determine the number of orders to fetch
+        // First pass: count the number of matching orders
         for (uint256 i = 0; i < totalOrders; i++) {
             if (
                 orders[i].orderType == _orderType && orders[i].status == _status
@@ -720,16 +720,23 @@ contract P2POTC {
             }
         }
 
+        // Adjust the end to ensure it does not exceed the total count
+        if (end > count) {
+            end = count;
+        }
+
         // Prepare the result array
-        OrderDetails[] memory results = new OrderDetails[](count);
+        OrderDetails[] memory results = new OrderDetails[](end - start);
+
         uint256 index = 0;
+        uint256 resultIndex = 0;
 
         for (uint256 i = 0; i < totalOrders; i++) {
             if (
                 orders[i].orderType == _orderType && orders[i].status == _status
             ) {
                 if (index >= start && index < end) {
-                    results[index - start] = OrderDetails({
+                    results[resultIndex] = OrderDetails({
                         orderId: i,
                         seller: orders[i].seller,
                         buyer: orders[i].buyer,
@@ -744,8 +751,12 @@ contract P2POTC {
                         accountNumber: orders[i].bankDetail.accountNumber,
                         note: orders[i].bankDetail.note
                     });
+                    resultIndex++;
                 }
                 index++;
+                if (resultIndex == results.length) {
+                    break; // Stop if we've filled the results array
+                }
             }
         }
 
