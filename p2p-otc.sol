@@ -48,20 +48,19 @@ contract P2POTC {
     }
 
     // Struct to represent an order
-struct Order {
-    address seller;
-    address buyer;
-    uint256 fullAmount;
-    uint256 netAmount;
-    uint256 price;
-    OrderStatus status;
-    OrderType orderType;
-    uint256 createdAt;
-    uint256 confirmedAt;
-    uint256 paymentAt; 
-    BankDetails bankDetail;
-}
-
+    struct Order {
+        address seller;
+        address buyer;
+        uint256 fullAmount;
+        uint256 netAmount;
+        uint256 price;
+        OrderStatus status;
+        OrderType orderType;
+        uint256 createdAt;
+        uint256 confirmedAt;
+        uint256 paymentAt;
+        BankDetails bankDetail;
+    }
 
     // Struct to represent seller's bank details
     struct BankDetails {
@@ -126,46 +125,45 @@ struct Order {
 
     // Function to create a new order
     function sellerCreateOrder(uint256 _amount, uint256 _price) external {
-    require(_amount > 0, "Amount must be greater than 0");
-    require(_price > 0, "Price must be greater than 0");
-    require(
-        _amount >= minSellAmount,
-        "Amount must be greater than or equal to the minimum sell amount"
-    );
-    require(
-        _amount <= maxSellAmount,
-        "Amount must be less than or equal to the maximum sell amount"
-    );
+        require(_amount > 0, "Amount must be greater than 0");
+        require(_price > 0, "Price must be greater than 0");
+        require(
+            _amount >= minSellAmount,
+            "Amount must be greater than or equal to the minimum sell amount"
+        );
+        require(
+            _amount <= maxSellAmount,
+            "Amount must be less than or equal to the maximum sell amount"
+        );
 
-    uint256 orderId = orderIdCounter++;
-    uint256 platformFee = (_amount * platformFeePercentage) / 10000;
-    uint256 netAmount = _amount - platformFee;
+        uint256 orderId = orderIdCounter++;
+        uint256 platformFee = (_amount * platformFeePercentage) / 10000;
+        uint256 netAmount = _amount - platformFee;
 
-    // Get the bank details of the seller at the time of order creation
-    BankDetails memory bankDetails = bankDetail[msg.sender];
+        // Get the bank details of the seller at the time of order creation
+        BankDetails memory bankDetails = bankDetail[msg.sender];
 
-    orders[orderId] = Order({
-        seller: msg.sender,
-        buyer: address(0),
-        fullAmount: _amount,
-        netAmount: netAmount,
-        price: _price,
-        status: OrderStatus.Open,
-        orderType: OrderType.Sell,
-        createdAt: block.timestamp,
-        confirmedAt: 0,
-        paymentAt: 0, // Initialize paymentAt
-        bankDetail: bankDetails // Store bank details at the time of order creation
-    });
+        orders[orderId] = Order({
+            seller: msg.sender,
+            buyer: address(0),
+            fullAmount: _amount,
+            netAmount: netAmount,
+            price: _price,
+            status: OrderStatus.Open,
+            orderType: OrderType.Sell,
+            createdAt: block.timestamp,
+            confirmedAt: 0,
+            paymentAt: 0,
+            bankDetail: bankDetails // Store bank details at the time of order creation
+        });
 
-    require(
-        bettingToken.transferFrom(msg.sender, address(this), _amount),
-        "Transfer failed"
-    );
+        require(
+            bettingToken.transferFrom(msg.sender, address(this), _amount),
+            "Transfer failed"
+        );
 
-    emit OrderCreated(orderId, msg.sender, _amount, _price);
-}
-
+        emit OrderCreated(orderId, msg.sender, _amount, _price);
+    }
 
     // Function to set the minimum sell amount
     function setMinSellAmount(uint256 _minSellAmount) external onlyOwner {
@@ -218,8 +216,13 @@ struct Order {
     // Function to cancel an order by the admin
     function sellerCancelOrderByAdmin(uint256 _orderId) external onlyOwner {
         Order storage order = orders[_orderId];
-        require(order.status == OrderStatus.Processing, "Order not processing");
-        require(order.confirmedAt != 0, "Order not confirmed");
+        require(order.orderType == OrderType.Sell, "Not a sell order");
+        require(
+            order.status == OrderStatus.Open ||
+                order.status == OrderStatus.Processing ||
+                order.status == OrderStatus.Paid,
+            "Order cannot be cancelled"
+        );
 
         require(
             bettingToken.transfer(order.seller, order.fullAmount),
@@ -233,12 +236,11 @@ struct Order {
     // Function for the buyer to confirm an order
     function buyerConfirmOrder(uint256 _orderId) external {
         Order storage order = orders[_orderId];
-
+        require(order.seller != msg.sender, "Not the buyer");
         require(order.confirmedAt == 0, "Order already confirmed");
         require(order.orderType == OrderType.Sell, "Not a sell order");
         require(order.seller != address(0), "Seller does not exist");
         require(order.status == OrderStatus.Open, "Order not open");
-        require(order.buyer == address(0), "Buyer already exists");
         require(order.buyer == address(0), "Buyer already exists");
 
         order.buyer = msg.sender;
@@ -251,7 +253,7 @@ struct Order {
     // Function to complete an order by the seller
     function sellerCompleteOrder(uint256 _orderId) external {
         Order storage order = orders[_orderId];
-        require(order.seller == msg.sender, "Not the seller");
+
         require(order.status == OrderStatus.Paid, "Order not paid");
 
         // Transfer the net amount to the buyer
@@ -274,6 +276,7 @@ struct Order {
     // Function to complete an order by the admin
     function sellerCompleteOrderByAdmin(uint256 _orderId) external onlyOwner {
         Order storage order = orders[_orderId];
+        require(order.orderType == OrderType.Sell, "Not a sell order");
         require(order.status == OrderStatus.Paid, "Order not paid");
 
         // Transfer the net amount to the buyer
@@ -294,51 +297,50 @@ struct Order {
     }
 
     function buyerCreateOrder(uint256 _amount, uint256 _price) external {
-    require(_amount > 0, "Amount must be greater than 0");
-    require(_price > 0, "Price must be greater than 0");
+        require(_amount > 0, "Amount must be greater than 0");
+        require(_price > 0, "Price must be greater than 0");
 
-    require(
-        _amount >= minBuyAmount,
-        "Amount must be greater than or equal to the minimum buy amount"
-    );
-    require(
-        _amount <= maxBuyAmount,
-        "Amount must be less than or equal to the maximum buy amount"
-    );
+        require(
+            _amount >= minBuyAmount,
+            "Amount must be greater than or equal to the minimum buy amount"
+        );
+        require(
+            _amount <= maxBuyAmount,
+            "Amount must be less than or equal to the maximum buy amount"
+        );
 
-    uint256 orderId = orderIdCounter++;
-    uint256 platformFee = (_amount * platformFeePercentage) / 10000;
-    uint256 netAmount = _amount - platformFee;
+        uint256 orderId = orderIdCounter++;
+        uint256 platformFee = (_amount * platformFeePercentage) / 10000;
+        uint256 netAmount = _amount - platformFee;
 
-    // Get the bank details of the buyer at the time of order creation
-    BankDetails memory bankDetails = bankDetail[msg.sender];
+        // Get the bank details of the buyer at the time of order creation
+        BankDetails memory bankDetails = bankDetail[msg.sender];
 
-    orders[orderId] = Order({
-        seller: address(0),
-        buyer: msg.sender,
-        fullAmount: _amount,
-        netAmount: netAmount,
-        price: _price,
-        status: OrderStatus.Open,
-        orderType: OrderType.Buy,
-        createdAt: block.timestamp,
-        confirmedAt: 0,
-        paymentAt: 0, 
-        bankDetail: bankDetails 
-    });
+        orders[orderId] = Order({
+            seller: address(0),
+            buyer: msg.sender,
+            fullAmount: _amount,
+            netAmount: netAmount,
+            price: _price,
+            status: OrderStatus.Open,
+            orderType: OrderType.Buy,
+            createdAt: block.timestamp,
+            confirmedAt: 0,
+            paymentAt: 0,
+            bankDetail: bankDetails
+        });
 
-    emit OrderCreated(orderId, msg.sender, _amount, _price);
-}
-
+        emit OrderCreated(orderId, msg.sender, _amount, _price);
+    }
 
     function sellerConfirmOrder(uint256 _orderId) external {
         Order storage order = orders[_orderId];
-
+        require(order.buyer != msg.sender, "Not the seller");
         require(order.confirmedAt == 0, "Order already confirmed");
         require(order.orderType == OrderType.Buy, "Not a buy order");
-        require(order.buyer != address(0), "Buyer does not exist");
         require(order.seller == address(0), "Seller already exists");
         require(order.status == OrderStatus.Open, "Order not open");
+        require(order.buyer != address(0), "Buyer does not exist");
 
         order.seller = msg.sender;
         order.status = OrderStatus.Processing;
@@ -359,7 +361,6 @@ struct Order {
     function buyerCompleteOrder(uint256 _orderId) external {
         Order storage order = orders[_orderId];
         require(order.orderType == OrderType.Buy, "Not a buy order");
-        require(order.buyer == msg.sender, "Not the buyer");
         require(
             order.status == OrderStatus.PaymentConfirmed,
             "Payment not confirmed"
@@ -395,7 +396,8 @@ struct Order {
         Order storage order = orders[_orderId];
         require(order.orderType == OrderType.Buy, "Not a buy order");
         require(
-            order.status == OrderStatus.PaymentConfirmed,
+            order.status == OrderStatus.PaymentConfirmed ||
+                order.status == OrderStatus.Paid,
             "Payment not confirmed"
         );
 
@@ -418,13 +420,25 @@ struct Order {
 
     function buyerCancelOrderByAdmin(uint256 _orderId) external onlyOwner {
         Order storage order = orders[_orderId];
-        require(order.status == OrderStatus.Processing, "Order not processing");
-        require(order.confirmedAt != 0, "Order not confirmed");
+
+        require(order.orderType == OrderType.Buy, "Not a buy order");
 
         require(
-            bettingToken.transfer(order.seller, order.fullAmount),
-            "Transfer failed"
+            order.status == OrderStatus.Open ||
+                order.status == OrderStatus.Processing ||
+                order.status == OrderStatus.Paid,
+            "Order cannot be cancelled"
         );
+
+        if (
+            order.status == OrderStatus.Processing ||
+            order.status == OrderStatus.Paid
+        ) {
+            require(
+                bettingToken.transfer(order.seller, order.fullAmount),
+                "Transfer failed"
+            );
+        }
 
         order.status = OrderStatus.Cancelled;
         emit OrderCancelledByAdmin(_orderId);
@@ -511,68 +525,98 @@ struct Order {
     }
 
     // Function to get the details of an order
-   function getOrderDetails(uint256 _orderId)
-    external
-    view
-    returns (
-        address seller,
-        address buyer,
-        uint256 fullAmount,
-     //   uint256 netAmount,
-        uint256 price,
-        string memory status,
-        string memory orderType,
-        uint256 createdAt,
-        uint256 confirmedAt,
-        uint256 paymentAt, 
-        string memory bankName,
-        string memory accountNumber,
-        string memory note
-    )
-{
-    Order storage order = orders[_orderId];
+    function getOrderDetails(uint256 _orderId)
+        external
+        view
+        returns (
+            address seller,
+            address buyer,
+            uint256 fullAmount,
+            uint256 netAmount,
+            uint256 price,
+            string memory status,
+            string memory orderType,
+            uint256 createdAt,
+            uint256 confirmedAt,
+            string memory bankName,
+            string memory accountNumber,
+            string memory note
+        )
+    {
+        Order storage order = orders[_orderId];
 
-    string memory orderStatus;
-    if (order.status == OrderStatus.Open) {
-        orderStatus = "Open";
-    } else if (order.status == OrderStatus.Processing) {
-        orderStatus = "Processing";
-    } else if (order.status == OrderStatus.Completed) {
-        orderStatus = "Completed";
-    } else if (order.status == OrderStatus.Cancelled) {
-        orderStatus = "Cancelled";
-    } else if (order.status == OrderStatus.RefundRequested) {
-        orderStatus = "RefundRequested";
-    } else if (order.status == OrderStatus.Paid) {
-        orderStatus = "Paid";
-    } else if (order.status == OrderStatus.PaymentConfirmed) {
-        orderStatus = "PaymentConfirmed";
+        string memory orderStatus;
+        if (order.status == OrderStatus.Open) {
+            orderStatus = "Open";
+        } else if (order.status == OrderStatus.Processing) {
+            orderStatus = "Processing";
+        } else if (order.status == OrderStatus.Completed) {
+            orderStatus = "Completed";
+        } else if (order.status == OrderStatus.Cancelled) {
+            orderStatus = "Cancelled";
+        } else if (order.status == OrderStatus.RefundRequested) {
+            orderStatus = "RefundRequested";
+        } else if (order.status == OrderStatus.Paid) {
+            orderStatus = "Paid";
+        } else if (order.status == OrderStatus.PaymentConfirmed) {
+            orderStatus = "PaymentConfirmed";
+        }
+
+        string memory orderTypeStr = order.orderType == OrderType.Buy
+            ? "Buy"
+            : "Sell";
+
+        // Return the bank details stored in the order
+        BankDetails memory bankDetails = order.bankDetail;
+
+        return (
+            order.seller,
+            order.buyer,
+            order.fullAmount,
+            order.netAmount,
+            order.price,
+            orderStatus,
+            orderTypeStr,
+            order.createdAt,
+            order.confirmedAt,
+            bankDetails.bankName,
+            bankDetails.accountNumber,
+            bankDetails.note
+        );
     }
 
-    string memory orderTypeStr = order.orderType == OrderType.Buy
-        ? "Buy"
-        : "Sell";
+    function getOtherOrderDetails(uint256 _orderId)
+        external
+        view
+        returns (
+            string memory orderType,
+            uint256 createdAt,
+            uint256 confirmedAt,
+            uint256 paymentAt,
+            string memory bankName,
+            string memory accountNumber,
+            string memory note
+        )
+    {
+        Order storage order = orders[_orderId];
 
-    // Return the bank details stored in the order
-    BankDetails memory bankDetails = order.bankDetail;
+        string memory orderTypeStr = order.orderType == OrderType.Buy
+            ? "Buy"
+            : "Sell";
 
-    return (
-        order.seller,
-        order.buyer,
-        order.fullAmount,
-   //     order.netAmount,
-        order.price,
-        orderStatus,
-        orderTypeStr,
-        order.createdAt,
-        order.confirmedAt,
-        order.paymentAt, 
-        bankDetails.bankName,
-        bankDetails.accountNumber,
-        bankDetails.note
-    );
-}
+        // Return the bank details stored in the order
+        BankDetails memory bankDetails = order.bankDetail;
 
+        return (
+            orderTypeStr,
+            order.createdAt,
+            order.confirmedAt,
+            order.paymentAt,
+            bankDetails.bankName,
+            bankDetails.accountNumber,
+            bankDetails.note
+        );
+    }
 
     // Function to get bank details for a seller
     function getBankDetails(address _seller)
@@ -588,25 +632,23 @@ struct Order {
         return (details.bankName, details.accountNumber, details.note);
     }
 
-function payment(uint256 _orderId) external {
-    Order storage order = orders[_orderId];
-    require(order.buyer == msg.sender, "Not the buyer");
-    require(order.status == OrderStatus.Processing, "Order not processing");
-    require(
-        order.orderType == OrderType.Buy ||
-            order.orderType == OrderType.Sell,
-        "Invalid order type"
-    );
+    function payment(uint256 _orderId) external {
+        Order storage order = orders[_orderId];
+        require(order.buyer == msg.sender, "Not the buyer");
+        require(order.status == OrderStatus.Processing, "Order not processing");
+        require(
+            order.orderType == OrderType.Buy ||
+                order.orderType == OrderType.Sell,
+            "Invalid order type"
+        );
 
+        order.paymentAt = block.timestamp;
 
-    order.paymentAt = block.timestamp;
+        // Move the order to the 'Paid' status
+        order.status = OrderStatus.Paid;
 
-    // Move the order to the 'Paid' status
-    order.status = OrderStatus.Paid;
-
-    emit OrderPaid(_orderId);
-}
-
+        emit OrderPaid(_orderId);
+    }
 
     // Function for the seller to confirm receipt of payment
     function paymentConfirm(uint256 _orderId) external {
