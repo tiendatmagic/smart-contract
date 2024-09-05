@@ -22,14 +22,17 @@ contract P2POTC {
     IERC20 public bettingToken;
     address public owner;
     uint256 private orderIdCounter;
-    uint256 public platformFeePercentage = 50; // 5% platform fee by default
-    address public platformFeeRecipient; // Address to receive platform fees
 
-    uint256 public minSellAmount;
-    uint256 public maxSellAmount;
+    PlatformConfig public platformConfig;
 
-    uint256 public minBuyAmount;
-    uint256 public maxBuyAmount;
+    struct PlatformConfig {
+        uint256 feePercentage;
+        address feeRecipient;
+        uint256 minSellAmount;
+        uint256 maxSellAmount;
+        uint256 minBuyAmount;
+        uint256 maxBuyAmount;
+    }
 
     // Enum to represent the different statuses of an order
     enum OrderStatus {
@@ -117,10 +120,20 @@ contract P2POTC {
         bettingToken = IERC20(_bettingToken);
         owner = msg.sender;
         orderIdCounter = 0;
-        minSellAmount = 0;
-        maxSellAmount = 0;
-        minBuyAmount = 0;
-        maxBuyAmount = 0;
+
+        // minSellAmount = 0;
+        // maxSellAmount = 0;
+        // minBuyAmount = 0;
+        // maxBuyAmount = 0;
+
+        platformConfig = PlatformConfig({
+            feePercentage: 50, // 5% platform fee by default
+            feeRecipient: address(0),
+            minSellAmount: 0,
+            maxSellAmount: 0,
+            minBuyAmount: 0,
+            maxBuyAmount: 0
+        });
     }
 
     // Function to create a new order
@@ -128,16 +141,18 @@ contract P2POTC {
         require(_amount > 0, "Amount must be greater than 0");
         require(_price > 0, "Price must be greater than 0");
         require(
-            _amount >= minSellAmount,
+            _amount >= platformConfig.minSellAmount,
             "Amount must be greater than or equal to the minimum sell amount"
         );
         require(
-            _amount <= maxSellAmount,
+            _amount <= platformConfig.maxSellAmount,
             "Amount must be less than or equal to the maximum sell amount"
         );
 
-        uint256 orderId = orderIdCounter++;
-        uint256 platformFee = (_amount * platformFeePercentage) / 10000;
+        uint256 orderId = orderIdCounter;
+        orderIdCounter++;
+
+        uint256 platformFee = (_amount * platformConfig.feePercentage) / 10000;
         uint256 netAmount = _amount - platformFee;
 
         // Get the bank details of the seller at the time of order creation
@@ -171,7 +186,7 @@ contract P2POTC {
             _minSellAmount > 0,
             "Minimum sell amount must be greater than 0"
         );
-        minSellAmount = _minSellAmount;
+        platformConfig.minSellAmount = _minSellAmount;
         emit MinSellAmountUpdated(_minSellAmount);
     }
 
@@ -181,19 +196,19 @@ contract P2POTC {
             _maxSellAmount > 0,
             "Maximum sell amount must be greater than 0"
         );
-        maxSellAmount = _maxSellAmount;
+        platformConfig.maxSellAmount = _maxSellAmount;
         emit MaxSellAmountUpdated(_maxSellAmount);
     }
 
     function setMinBuyAmount(uint256 _minBuyAmount) external onlyOwner {
         require(_minBuyAmount > 0, "Minimum buy amount must be greater than 0");
-        minBuyAmount = _minBuyAmount;
+        platformConfig.minBuyAmount = _minBuyAmount;
         emit MinBuyAmountUpdated(_minBuyAmount);
     }
 
     function setMaxBuyAmount(uint256 _maxBuyAmount) external onlyOwner {
         require(_maxBuyAmount > 0, "Maximum buy amount must be greater than 0");
-        maxBuyAmount = _maxBuyAmount;
+        platformConfig.maxBuyAmount = _maxBuyAmount;
         emit MaxBuyAmountUpdated(_maxBuyAmount);
     }
 
@@ -265,7 +280,7 @@ contract P2POTC {
         // Transfer the platform fee to the designated recipient
         uint256 platformFee = order.fullAmount - order.netAmount;
         require(
-            bettingToken.transfer(platformFeeRecipient, platformFee),
+            bettingToken.transfer(platformConfig.feeRecipient, platformFee),
             "Transfer failed"
         );
 
@@ -288,7 +303,7 @@ contract P2POTC {
         // Transfer the platform fee to the designated recipient
         uint256 platformFee = order.fullAmount - order.netAmount;
         require(
-            bettingToken.transfer(platformFeeRecipient, platformFee),
+            bettingToken.transfer(platformConfig.feeRecipient, platformFee),
             "Transfer failed"
         );
 
@@ -301,16 +316,18 @@ contract P2POTC {
         require(_price > 0, "Price must be greater than 0");
 
         require(
-            _amount >= minBuyAmount,
+            _amount >= platformConfig.minBuyAmount,
             "Amount must be greater than or equal to the minimum buy amount"
         );
         require(
-            _amount <= maxBuyAmount,
+            _amount <= platformConfig.maxBuyAmount,
             "Amount must be less than or equal to the maximum buy amount"
         );
 
-        uint256 orderId = orderIdCounter++;
-        uint256 platformFee = (_amount * platformFeePercentage) / 10000;
+        uint256 orderId = orderIdCounter;
+        orderIdCounter++;
+
+        uint256 platformFee = (_amount * platformConfig.feePercentage) / 10000;
         uint256 netAmount = _amount - platformFee;
 
         // Get the bank details of the buyer at the time of order creation
@@ -375,7 +392,7 @@ contract P2POTC {
         // Transfer the platform fee to the designated recipient
         uint256 platformFee = order.fullAmount - order.netAmount;
         require(
-            bettingToken.transfer(platformFeeRecipient, platformFee),
+            bettingToken.transfer(platformConfig.feeRecipient, platformFee),
             "Transfer failed"
         );
 
@@ -410,7 +427,7 @@ contract P2POTC {
         // Transfer the platform fee to the designated recipient
         uint256 platformFee = order.fullAmount - order.netAmount;
         require(
-            bettingToken.transfer(platformFeeRecipient, platformFee),
+            bettingToken.transfer(platformConfig.feeRecipient, platformFee),
             "Transfer failed"
         );
 
@@ -480,14 +497,14 @@ contract P2POTC {
     // Function to set the platform fee recipient address
     function setPlatformFeeRecipient(address _recipient) external onlyOwner {
         require(_recipient != address(0), "Invalid address");
-        platformFeeRecipient = _recipient;
+        platformConfig.feeRecipient = _recipient;
         emit PlatformFeeRecipientUpdated(_recipient);
     }
 
     // Function to update the platform fee percentage
     function setPlatformFeePercentage(uint256 _percentage) external onlyOwner {
         require(_percentage <= 10000, "Fee percentage too high");
-        platformFeePercentage = _percentage;
+        platformConfig.feePercentage = _percentage;
         emit PlatformFeeUpdated(_percentage);
     }
 
