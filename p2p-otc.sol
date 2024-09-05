@@ -34,6 +34,23 @@ contract P2POTC {
         uint256 maxBuyAmount;
     }
 
+    struct OrderDetails {
+        uint256 orderId;
+        address seller;
+        address buyer;
+        uint256 fullAmount;
+        uint256 netAmount;
+        uint256 price;
+        string status;
+        string orderType;
+        uint256 createdAt;
+        uint256 confirmedAt;
+        string bankName;
+        string accountNumber;
+        string note;
+    }
+
+
     // Enum to represent the different statuses of an order
     enum OrderStatus {
         Open,
@@ -682,5 +699,71 @@ contract P2POTC {
     // Function to count the total number of orders created
     function countOrders() external view returns (uint256) {
         return orderIdCounter;
+    }
+
+    function getOrdersByTypeAndStatus(
+        OrderType _orderType,
+        OrderStatus _status,
+        uint256 _page
+    ) external view returns (OrderDetails[] memory) {
+        uint256 start = (_page - 1) * 10;
+        uint256 end = start + 10;
+        uint256 totalOrders = orderIdCounter;
+        uint256 count = 0;
+
+        // Determine the number of orders to fetch
+        for (uint256 i = 0; i < totalOrders; i++) {
+            if (
+                orders[i].orderType == _orderType && orders[i].status == _status
+            ) {
+                count++;
+            }
+        }
+
+        // Prepare the result array
+        OrderDetails[] memory results = new OrderDetails[](count);
+        uint256 index = 0;
+
+        for (uint256 i = 0; i < totalOrders; i++) {
+            if (
+                orders[i].orderType == _orderType && orders[i].status == _status
+            ) {
+                if (index >= start && index < end) {
+                    results[index - start] = OrderDetails({
+                        orderId: i,
+                        seller: orders[i].seller,
+                        buyer: orders[i].buyer,
+                        fullAmount: orders[i].fullAmount,
+                        netAmount: orders[i].netAmount,
+                        price: orders[i].price,
+                        status: _orderStatusToString(orders[i].status),
+                        orderType: _orderType == OrderType.Buy ? "Buy" : "Sell",
+                        createdAt: orders[i].createdAt,
+                        confirmedAt: orders[i].confirmedAt,
+                        bankName: orders[i].bankDetail.bankName,
+                        accountNumber: orders[i].bankDetail.accountNumber,
+                        note: orders[i].bankDetail.note
+                    });
+                }
+                index++;
+            }
+        }
+
+        return results;
+    }
+
+    function _orderStatusToString(OrderStatus status)
+        internal
+        pure
+        returns (string memory)
+    {
+        if (status == OrderStatus.Open) return "Open";
+        if (status == OrderStatus.Processing) return "Processing";
+        if (status == OrderStatus.Completed) return "Completed";
+        if (status == OrderStatus.Cancelled) return "Cancelled";
+        if (status == OrderStatus.RefundRequested) return "RefundRequested";
+        if (status == OrderStatus.Paid) return "Paid";
+        if (status == OrderStatus.PaymentConfirmed) return "PaymentConfirmed";
+        revert("Invalid status");
     }
 }
