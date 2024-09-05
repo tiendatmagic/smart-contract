@@ -703,22 +703,49 @@ contract P2POTC {
     function getOrdersByTypeAndStatus(
         OrderType _orderType,
         OrderStatus _status,
+        string memory _sortBy,
+        bool _ascending,
         uint256 _page
     ) external view returns (OrderDetails[] memory) {
-        uint256 itemsPerPage = 3; // Number of items per page
+        uint256 itemsPerPage = 10;
         uint256 start = (_page - 1) * itemsPerPage;
         uint256 end = start + itemsPerPage;
-        uint256 totalOrders = orderIdCounter;
+
+        // First pass: Collect all matching orders into a temporary array
+        OrderDetails[] memory tempResults = new OrderDetails[](orderIdCounter);
         uint256 count = 0;
 
-        // First pass: count the number of matching orders
-        for (uint256 i = 0; i < totalOrders; i++) {
+        for (uint256 i = 0; i < orderIdCounter; i++) {
             if (
                 orders[i].orderType == _orderType && orders[i].status == _status
             ) {
+                tempResults[count] = OrderDetails({
+                    orderId: i,
+                    seller: orders[i].seller,
+                    buyer: orders[i].buyer,
+                    fullAmount: orders[i].fullAmount,
+                    netAmount: orders[i].netAmount,
+                    price: orders[i].price,
+                    status: _orderStatusToString(orders[i].status),
+                    orderType: _orderType == OrderType.Buy ? "Buy" : "Sell",
+                    createdAt: orders[i].createdAt,
+                    confirmedAt: orders[i].confirmedAt,
+                    bankName: orders[i].bankDetail.bankName,
+                    accountNumber: orders[i].bankDetail.accountNumber,
+                    note: orders[i].bankDetail.note
+                });
                 count++;
             }
         }
+
+        // Resize the array to the actual number of matching orders
+        OrderDetails[] memory filteredResults = new OrderDetails[](count);
+        for (uint256 j = 0; j < count; j++) {
+            filteredResults[j] = tempResults[j];
+        }
+
+        // Sort the filtered results
+        _sortOrders(filteredResults, _sortBy, _ascending);
 
         // Adjust the end to ensure it does not exceed the total count
         if (end > count) {
@@ -727,40 +754,54 @@ contract P2POTC {
 
         // Prepare the result array
         OrderDetails[] memory results = new OrderDetails[](end - start);
-
-        uint256 index = 0;
-        uint256 resultIndex = 0;
-
-        for (uint256 i = 0; i < totalOrders; i++) {
-            if (
-                orders[i].orderType == _orderType && orders[i].status == _status
-            ) {
-                if (index >= start && index < end) {
-                    results[resultIndex] = OrderDetails({
-                        orderId: i,
-                        seller: orders[i].seller,
-                        buyer: orders[i].buyer,
-                        fullAmount: orders[i].fullAmount,
-                        netAmount: orders[i].netAmount,
-                        price: orders[i].price,
-                        status: _orderStatusToString(orders[i].status),
-                        orderType: _orderType == OrderType.Buy ? "Buy" : "Sell",
-                        createdAt: orders[i].createdAt,
-                        confirmedAt: orders[i].confirmedAt,
-                        bankName: orders[i].bankDetail.bankName,
-                        accountNumber: orders[i].bankDetail.accountNumber,
-                        note: orders[i].bankDetail.note
-                    });
-                    resultIndex++;
-                }
-                index++;
-                if (resultIndex == results.length) {
-                    break; // Stop if we've filled the results array
-                }
-            }
+        for (uint256 k = start; k < end; k++) {
+            results[k - start] = filteredResults[k];
         }
 
         return results;
+    }
+
+    function _sortOrders(
+        OrderDetails[] memory ordersArray,
+        string memory _sortBy,
+        bool _ascending
+    ) internal pure {
+        for (uint256 i = 0; i < ordersArray.length - 1; i++) {
+            for (uint256 j = i + 1; j < ordersArray.length; j++) {
+                bool swap = false;
+                if (
+                    keccak256(abi.encodePacked(_sortBy)) ==
+                    keccak256(abi.encodePacked("createdAt"))
+                ) {
+                    if (
+                        _ascending
+                            ? ordersArray[i].createdAt >
+                                ordersArray[j].createdAt
+                            : ordersArray[i].createdAt <
+                                ordersArray[j].createdAt
+                    ) {
+                        swap = true;
+                    }
+                } else if (
+                    keccak256(abi.encodePacked(_sortBy)) ==
+                    keccak256(abi.encodePacked("price"))
+                ) {
+                    if (
+                        _ascending
+                            ? ordersArray[i].price > ordersArray[j].price
+                            : ordersArray[i].price < ordersArray[j].price
+                    ) {
+                        swap = true;
+                    }
+                }
+
+                if (swap) {
+                    OrderDetails memory temp = ordersArray[i];
+                    ordersArray[i] = ordersArray[j];
+                    ordersArray[j] = temp;
+                }
+            }
+        }
     }
 
     function _orderStatusToString(OrderStatus status)
