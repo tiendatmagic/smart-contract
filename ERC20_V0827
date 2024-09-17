@@ -4,6 +4,7 @@ pragma solidity ^0.8.27;
 
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol"; // Import giao diện IERC20
 
 contract USDT_Token is ERC20 {
     uint256 private _totalSupply;
@@ -27,14 +28,14 @@ contract USDT_Token is ERC20 {
         _;
     }
 
-    // // Mint new tokens, only the owner can call this function
+    // Mint new tokens, only the owner can call this function
     function mint(address to, uint256 amount) external onlyOwner {
         require(to != address(0), "ERC20: mint to the zero address");
         _totalSupply += amount;
         _mint(to, amount);
     }
 
-    // Burn tokens, any holder can call this function to destroy their tokens
+    // Burn tokens, only the owner can call this function
     function burn(uint256 amount) external onlyOwner {
         _totalSupply -= amount;
         _burn(msg.sender, amount);
@@ -47,4 +48,25 @@ contract USDT_Token is ERC20 {
     function totalSupply() public view override returns (uint256) {
         return _totalSupply;
     }
+
+    // Withdraw ERC20 tokens from the contract
+    function withdraw(address tokenAddress, uint256 amount) external onlyOwner {
+        require(tokenAddress != address(0), "Invalid token address");
+        IERC20 token = IERC20(tokenAddress);
+        uint256 balance = token.balanceOf(address(this));
+        require(balance >= amount, "Insufficient token balance in contract");
+        token.transfer(msg.sender, amount);
+    }
+
+    // Withdraw ETH from the contract
+    function withdrawNativeToken(uint256 amount) external onlyOwner {
+        require(address(this).balance >= amount, "Insufficient ETH balance in contract");
+        payable(msg.sender).transfer(amount);
+    }
+
+    // Function to receive ETH. msg.data must be empty
+    receive() external payable {}
+
+    // Fallback function is called when msg.data is not empty
+    fallback() external payable {}
 }
