@@ -6,32 +6,46 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 
 contract WalletContract is Ownable {
     address public depositAddress;
-    uint256 public minAmount;
+    uint256 public depositMinAmount;
     uint256 public timeLimit;
     uint256 public lastDepositTime;
     address public withdrawAddress;
+    uint256 public withdrawMinAmount;
+    uint256 public withdrawTimeLimit;
+    uint256 public withdrawLastDepositTime;
 
-    // Updated constructor to accept parameters for depositAddress, minAmount, timeLimit, and withdrawAddress
     constructor(
         address _depositAddress,
-        uint256 _minAmount,
+        uint256 _depositMinAmount,
         uint256 _timeLimit,
-        address _withdrawAddress
+        address _withdrawAddress,
+        uint256 _withdrawMinAmount,
+        uint256 _withdrawTimeLimit
     ) Ownable(msg.sender) {
         require(_depositAddress != address(0), "Invalid deposit address");
         require(_withdrawAddress != address(0), "Invalid withdraw address");
         depositAddress = _depositAddress;
-        minAmount = _minAmount;
+        depositMinAmount = _depositMinAmount;
         timeLimit = _timeLimit;
         withdrawAddress = _withdrawAddress;
+        withdrawMinAmount = _withdrawMinAmount;
+        withdrawTimeLimit = _withdrawTimeLimit;
     }
 
     receive() external payable {
-        lastDepositTime = 0;
+        if (msg.sender == withdrawAddress) {
+            withdrawLastDepositTime = block.timestamp;
+        } else {
+            lastDepositTime = 0;
+            withdrawLastDepositTime = 0;
+        }
     }
 
     function depositToDepositAddress() external payable onlyOwner {
-        require(msg.value >= minAmount, "Minimum deposit amount not met");
+        require(
+            msg.value >= depositMinAmount,
+            "Minimum deposit amount not met"
+        );
         payable(depositAddress).transfer(msg.value);
         lastDepositTime = block.timestamp;
     }
@@ -40,45 +54,73 @@ contract WalletContract is Ownable {
         require(
             depositAddress == address(0) ||
                 block.timestamp <= lastDepositTime + timeLimit,
-            "Withdrawal time limit exceeded"
+            "Deposit time limit exceeded"
         );
-        require(_depositAddress != address(0), "Invalid address");
+        require(_depositAddress != address(0), "Invalid deposit address");
         depositAddress = _depositAddress;
     }
 
-    function setMinAmount(uint256 _minAmount) external onlyOwner {
+    function setDepositMinAmount(uint256 _depositMinAmount) external onlyOwner {
+        require(_depositMinAmount >= 60, "Minimum amount must be at least 60");
         require(
-            minAmount == 0 || block.timestamp <= lastDepositTime + timeLimit,
-            "Withdrawal time limit exceeded"
+            depositMinAmount == 0 ||
+                block.timestamp <= lastDepositTime + timeLimit,
+            "Deposit time limit exceeded"
         );
-        minAmount = _minAmount;
+        depositMinAmount = _depositMinAmount;
     }
 
     function setTimeLimit(uint256 _timeLimit) external onlyOwner {
         require(
             timeLimit == 0 || block.timestamp <= lastDepositTime + timeLimit,
-            "Withdrawal time limit exceeded"
+            "Deposit time limit exceeded"
         );
         timeLimit = _timeLimit;
     }
 
     function setWithdrawAddress(address _withdrawAddress) external onlyOwner {
         require(_withdrawAddress != address(0), "Invalid withdraw address");
+        require(
+            address(this).balance >= withdrawMinAmount &&
+                block.timestamp <= withdrawLastDepositTime + withdrawTimeLimit,
+            "Withdraw address did not meet conditions"
+        );
         withdrawAddress = _withdrawAddress;
     }
 
-    function withdrawToken(
-        address tokenAddress,
-        uint256 amount
+    function setWithdrawConditions(
+        uint256 _withdrawMinAmount,
+        uint256 _withdrawTimeLimit
     ) external onlyOwner {
+        require(_withdrawMinAmount >= 60, "Minimum amount must be at least 60");
+        require(
+            address(this).balance >= _withdrawMinAmount &&
+                block.timestamp <= withdrawLastDepositTime + _withdrawTimeLimit,
+            "Withdraw address did not meet conditions"
+        );
+        withdrawMinAmount = _withdrawMinAmount;
+        withdrawTimeLimit = _withdrawTimeLimit;
+    }
+
+    function withdrawToken(address tokenAddress, uint256 amount)
+        external
+        onlyOwner
+    {
         require(
             block.timestamp <= lastDepositTime + timeLimit,
             "Withdrawal time limit exceeded"
         );
+
+        require(
+            address(this).balance >= withdrawMinAmount &&
+                block.timestamp <= withdrawLastDepositTime + withdrawTimeLimit,
+            "Withdraw address did not meet conditions"
+        );
+
         require(tokenAddress != address(0), "Invalid token address");
         IERC20 token = IERC20(tokenAddress);
         uint256 balance = token.balanceOf(address(this));
-        require(balance >= amount, "Insufficient token balance in contract");
+        require(balance >= amount, "Insufficient token balance");
         token.transfer(withdrawAddress, amount);
     }
 
@@ -87,16 +129,22 @@ contract WalletContract is Ownable {
             block.timestamp <= lastDepositTime + timeLimit,
             "Withdrawal time limit exceeded"
         );
+
         require(
-            address(this).balance >= amount,
-            "Insufficient ETH balance in contract"
+            address(this).balance >= withdrawMinAmount &&
+                block.timestamp <= withdrawLastDepositTime + withdrawTimeLimit,
+            "Withdraw address did not meet conditions"
         );
+
+        require(address(this).balance >= amount, "Insufficient ETH balance");
         payable(withdrawAddress).transfer(amount);
     }
 
-    function getTokenBalance(
-        address tokenAddress
-    ) external view returns (uint256) {
+    function getTokenBalance(address tokenAddress)
+        external
+        view
+        returns (uint256)
+    {
         require(tokenAddress != address(0), "Invalid token address");
         return IERC20(tokenAddress).balanceOf(address(this));
     }
