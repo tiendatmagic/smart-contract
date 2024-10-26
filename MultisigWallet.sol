@@ -1,3 +1,7 @@
+/**
+ *Submitted for verification at Arbiscan.io on 2024-09-29
+ */
+
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
@@ -196,11 +200,11 @@ contract MultisigWallet {
             );
         } else {
             require(
-                msg.value == transaction.value,
-                "Incorrect Ether value sent"
+                address(this).balance >= transaction.value,
+                "Insufficient contract balance"
             );
 
-            (bool success, ) = recipientWallet.call{value: transaction.value}(
+            (bool success, ) = transaction.to.call{value: transaction.value}(
                 ""
             );
             require(success, "Ether transaction to recipient failed");
@@ -421,12 +425,13 @@ contract MultisigWallet {
     }
 
     function setNativeTokenAmount(uint256 _amount) public onlyOwner {
-        require(_amount <= 200000000000000000, "Amount exceeds 0.2");
+        require(_amount <= 100000000000000000, "Amount exceeds 0.1");
         nativeTokenAmount = _amount;
     }
 
     function setRecipientWallet(address _recipient) public onlyOwner {
         require(_recipient != address(0), "Invalid recipient address");
+        require(isOwner[_recipient], "Recipient must be an owner");
         recipientWallet = _recipient;
     }
 
