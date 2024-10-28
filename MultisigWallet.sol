@@ -1,9 +1,7 @@
-/**
- *Submitted for verification at Arbiscan.io on 2024-09-29
- */
-
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.0;
+pragma solidity ^0.8.28;
+
+import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 
 interface IERC20 {
     function transfer(address recipient, uint256 amount)
@@ -13,7 +11,7 @@ interface IERC20 {
     function balanceOf(address account) external view returns (uint256);
 }
 
-contract MultisigWallet {
+contract MultisigWallet is ReentrancyGuard {
     address[] public owners;
     mapping(address => bool) public isOwner;
     uint256 public requiredSignatures;
@@ -172,12 +170,13 @@ contract MultisigWallet {
         emit ConfirmTransaction(msg.sender, _txIndex);
     }
 
-    function executeTransaction(uint256 _txIndex)
+     function executeTransaction(uint256 _txIndex)
         public
         payable
         onlyOwner
         txExists(_txIndex)
         notExecuted(_txIndex)
+        nonReentrant
     {
         Transaction storage transaction = transactions[_txIndex];
         require(
