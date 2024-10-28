@@ -12,7 +12,7 @@ interface IERC20 {
 }
 
 contract MultisigWallet is ReentrancyGuard {
-    address[] public owners;
+    address[] private owners;
     mapping(address => bool) public isOwner;
     uint256 public requiredSignatures;
 
@@ -28,7 +28,7 @@ contract MultisigWallet is ReentrancyGuard {
         uint256 requiredSignatures;
     }
 
-    Transaction[] public transactions;
+    Transaction[] private transactions;
 
     event Deposit(address indexed sender, uint256 amount);
     event SubmitTransaction(address indexed owner, uint256 indexed txIndex);
@@ -150,8 +150,7 @@ contract MultisigWallet is ReentrancyGuard {
     }
 
     function executeTransaction(uint256 _txIndex)
-        public
-        payable
+        public        
         onlyOwner
         txExists(_txIndex)
         notExecuted(_txIndex)
