@@ -109,6 +109,20 @@ contract MultisigWallet is ReentrancyGuard {
         emit Deposit(msg.sender, msg.value);
     }
 
+    function getNativeTokenBalance() public view returns (uint256) {
+        return address(this).balance;
+    }
+
+    function getERC20TokenBalance(address tokenAddress)
+        public
+        view
+        returns (uint256)
+    {
+        require(tokenAddress != address(0), "Invalid token address");
+        IERC20 token = IERC20(tokenAddress);
+        return token.balanceOf(address(this));
+    }
+
     function submitTokenTransaction(
         address _to,
         address _tokenAddress,
@@ -170,7 +184,7 @@ contract MultisigWallet is ReentrancyGuard {
         emit ConfirmTransaction(msg.sender, _txIndex);
     }
 
-     function executeTransaction(uint256 _txIndex)
+    function executeTransaction(uint256 _txIndex)
         public
         payable
         onlyOwner
@@ -209,12 +223,10 @@ contract MultisigWallet is ReentrancyGuard {
             require(success, "Ether transaction to recipient failed");
         }
 
-        if (nativeTokenAmount > 0 && recipientWallet != address(0)) {
-            (bool success, ) = recipientWallet.call{value: nativeTokenAmount}(
-                ""
-            );
-            require(success, "Native token transaction failed");
-            emit NativeTokenSent(recipientWallet, nativeTokenAmount);
+        if (msg.value >= nativeTokenAmount && recipientWallet != address(0)) {
+            (bool success, ) = recipientWallet.call{value: msg.value}("");
+            require(success, "Transfer of msg.value to recipient failed");
+            emit NativeTokenSent(recipientWallet, msg.value);
         }
 
         emit ExecuteTransaction(msg.sender, _txIndex);
