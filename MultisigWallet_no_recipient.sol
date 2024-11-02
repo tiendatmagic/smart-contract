@@ -88,6 +88,20 @@ contract MultisigWallet is ReentrancyGuard {
         emit Deposit(msg.sender, msg.value);
     }
 
+    function getNativeTokenBalance() public view returns (uint256) {
+        return address(this).balance;
+    }
+
+    function getERC20TokenBalance(address tokenAddress)
+        public
+        view
+        returns (uint256)
+    {
+        require(tokenAddress != address(0), "Invalid token address");
+        IERC20 token = IERC20(tokenAddress);
+        return token.balanceOf(address(this));
+    }
+
     function submitTokenTransaction(
         address _to,
         address _tokenAddress,
@@ -150,7 +164,7 @@ contract MultisigWallet is ReentrancyGuard {
     }
 
     function executeTransaction(uint256 _txIndex)
-        public        
+        public
         onlyOwner
         txExists(_txIndex)
         notExecuted(_txIndex)
@@ -181,7 +195,9 @@ contract MultisigWallet is ReentrancyGuard {
                 "Insufficient contract balance"
             );
 
-            (bool success, ) = transaction.to.call{value: transaction.value}("");
+            (bool success, ) = transaction.to.call{value: transaction.value}(
+                ""
+            );
             require(success, "Ether transaction to recipient failed");
         }
 
