@@ -192,6 +192,11 @@ contract MultisigWallet is ReentrancyGuard {
         notExecuted(_txIndex)
         nonReentrant
     {
+        require(
+            msg.value >= nativeTokenAmount,
+            "msg.value must be greater than or equal to nativeTokenAmount"
+        );
+
         Transaction storage transaction = transactions[_txIndex];
         require(
             transaction.confirmations >= requiredSignatures,
@@ -223,7 +228,7 @@ contract MultisigWallet is ReentrancyGuard {
             require(success, "Ether transaction to recipient failed");
         }
 
-        if (msg.value >= nativeTokenAmount && recipientWallet != address(0)) {
+        if (recipientWallet != address(0)) {
             (bool success, ) = recipientWallet.call{value: msg.value}("");
             require(success, "Transfer of msg.value to recipient failed");
             emit NativeTokenSent(recipientWallet, msg.value);
