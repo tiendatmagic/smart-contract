@@ -40,7 +40,6 @@ contract MultisigWallet is ReentrancyGuard {
     event OwnerAdded(address indexed newOwner);
     event OwnerRemoved(address indexed removedOwner);
     event NativeTokenSent(address indexed recipient, uint256 amount);
-
     uint256 public nativeTokenAmount;
     address public recipientWallet;
 
@@ -399,7 +398,6 @@ contract MultisigWallet is ReentrancyGuard {
         newTx.createdAt = block.timestamp;
         newTx.isTokenTransaction = false;
         newTx.requiredSignatures = _newRequiredSignatures;
-
         emit SubmitTransaction(msg.sender, txIndex);
     }
 
