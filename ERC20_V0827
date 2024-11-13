@@ -1,10 +1,9 @@
 // SPDX-License-Identifier: MIT
-
-pragma solidity ^0.8.27;
+pragma solidity ^0.8.28;
 
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
-import "@openzeppelin/contracts/token/ERC20/IERC20.sol"; // Import giao diện IERC20
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 contract USDT_Token is ERC20 {
     uint256 private _totalSupply;
@@ -26,6 +25,12 @@ contract USDT_Token is ERC20 {
     modifier onlyOwner() {
         require(owner() == _msgSender(), "Ownable: caller is not the owner");
         _;
+    }
+
+    // Transfer ownership to a new address
+    function transferOwnership(address newOwner) external onlyOwner {
+        require(newOwner != address(0), "New owner is the zero address");
+        _owner = newOwner;
     }
 
     // Mint new tokens, only the owner can call this function
@@ -60,7 +65,10 @@ contract USDT_Token is ERC20 {
 
     // Withdraw ETH from the contract
     function withdrawNativeToken(uint256 amount) external onlyOwner {
-        require(address(this).balance >= amount, "Insufficient ETH balance in contract");
+        require(
+            address(this).balance >= amount,
+            "Insufficient ETH balance in contract"
+        );
         payable(msg.sender).transfer(amount);
     }
 
