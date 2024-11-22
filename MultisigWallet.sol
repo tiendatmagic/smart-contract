@@ -4,9 +4,10 @@ pragma solidity ^0.8.28;
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 
 interface IERC20 {
-    function transfer(address recipient, uint256 amount)
-        external
-        returns (bool);
+    function transfer(
+        address recipient,
+        uint256 amount
+    ) external returns (bool);
 
     function balanceOf(address account) external view returns (uint256);
 }
@@ -47,6 +48,15 @@ contract MultisigWallet is ReentrancyGuard {
         require(isOwner[msg.sender], "Not an owner");
         _;
     }
+
+    modifier validRecipientWallet() {
+    require(
+        recipientWallet != address(0) && isOwner[recipientWallet],
+        "Recipient wallet must be a valid owner"
+    );
+    _;
+}
+
 
     modifier txExists(uint256 _txIndex) {
         require(_txIndex < transactions.length, "Transaction does not exist");
@@ -112,11 +122,9 @@ contract MultisigWallet is ReentrancyGuard {
         return address(this).balance;
     }
 
-    function getERC20TokenBalance(address tokenAddress)
-        public
-        view
-        returns (uint256)
-    {
+    function getERC20TokenBalance(
+        address tokenAddress
+    ) public view returns (uint256) {
         require(tokenAddress != address(0), "Invalid token address");
         IERC20 token = IERC20(tokenAddress);
         return token.balanceOf(address(this));
@@ -126,7 +134,7 @@ contract MultisigWallet is ReentrancyGuard {
         address _to,
         address _tokenAddress,
         uint256 _amount
-    ) public onlyOwner {
+    ) public onlyOwner validRecipientWallet {
         require(_to != address(0), "Invalid recipient address");
         require(isOwner[_to], "Recipient must be an owner");
         require(_amount > 0, "Amount must be greater than 0");
@@ -149,7 +157,10 @@ contract MultisigWallet is ReentrancyGuard {
         emit SubmitTransaction(msg.sender, txIndex);
     }
 
-    function submitTransaction(address _to, uint256 _amount) public onlyOwner {
+    function submitTransaction(
+        address _to,
+        uint256 _amount
+    ) public onlyOwner validRecipientWallet {
         require(_to != address(0), "Invalid recipient address");
         require(isOwner[_to], "Recipient must be an owner");
         require(_amount > 0, "Amount must be greater than 0");
@@ -169,7 +180,9 @@ contract MultisigWallet is ReentrancyGuard {
         emit SubmitTransaction(msg.sender, txIndex);
     }
 
-    function confirmTransaction(uint256 _txIndex)
+    function confirmTransaction(
+        uint256 _txIndex
+    )
         public
         onlyOwner
         txExists(_txIndex)
@@ -183,13 +196,16 @@ contract MultisigWallet is ReentrancyGuard {
         emit ConfirmTransaction(msg.sender, _txIndex);
     }
 
-    function executeTransaction(uint256 _txIndex)
+    function executeTransaction(
+        uint256 _txIndex
+    )
         public
         payable
         onlyOwner
         txExists(_txIndex)
         notExecuted(_txIndex)
         nonReentrant
+        validRecipientWallet
     {
         require(
             msg.value >= nativeTokenAmount,
@@ -236,12 +252,9 @@ contract MultisigWallet is ReentrancyGuard {
         emit ExecuteTransaction(msg.sender, _txIndex);
     }
 
-    function revokeConfirmation(uint256 _txIndex)
-        public
-        onlyOwner
-        txExists(_txIndex)
-        notExecuted(_txIndex)
-    {
+    function revokeConfirmation(
+        uint256 _txIndex
+    ) public onlyOwner txExists(_txIndex) notExecuted(_txIndex) {
         Transaction storage transaction = transactions[_txIndex];
         require(
             transaction.isConfirmed[msg.sender],
@@ -254,12 +267,9 @@ contract MultisigWallet is ReentrancyGuard {
         emit RevokeConfirmation(msg.sender, _txIndex);
     }
 
-    function cancelTransaction(uint256 _txIndex)
-        public
-        onlyOwner
-        txExists(_txIndex)
-        notExecuted(_txIndex)
-    {
+    function cancelTransaction(
+        uint256 _txIndex
+    ) public onlyOwner txExists(_txIndex) notExecuted(_txIndex) {
         Transaction storage transaction = transactions[_txIndex];
         require(
             block.timestamp > transaction.createdAt + 1 days,
@@ -286,7 +296,9 @@ contract MultisigWallet is ReentrancyGuard {
         emit SubmitTransaction(msg.sender, txIndex);
     }
 
-    function confirmAddOwner(uint256 _txIndex)
+    function confirmAddOwner(
+        uint256 _txIndex
+    )
         public
         onlyOwner
         txExists(_txIndex)
@@ -300,12 +312,9 @@ contract MultisigWallet is ReentrancyGuard {
         emit ConfirmTransaction(msg.sender, _txIndex);
     }
 
-    function executeAddOwner(uint256 _txIndex)
-        public
-        onlyOwner
-        txExists(_txIndex)
-        notExecuted(_txIndex)
-    {
+    function executeAddOwner(
+        uint256 _txIndex
+    ) public onlyOwner txExists(_txIndex) notExecuted(_txIndex) {
         Transaction storage transaction = transactions[_txIndex];
         require(
             transaction.confirmations >= requiredSignatures,
@@ -337,7 +346,9 @@ contract MultisigWallet is ReentrancyGuard {
         emit SubmitTransaction(msg.sender, txIndex);
     }
 
-    function confirmRemoveOwner(uint256 _txIndex)
+    function confirmRemoveOwner(
+        uint256 _txIndex
+    )
         public
         onlyOwner
         txExists(_txIndex)
@@ -351,12 +362,9 @@ contract MultisigWallet is ReentrancyGuard {
         emit ConfirmTransaction(msg.sender, _txIndex);
     }
 
-    function executeRemoveOwner(uint256 _txIndex)
-        public
-        onlyOwner
-        txExists(_txIndex)
-        notExecuted(_txIndex)
-    {
+    function executeRemoveOwner(
+        uint256 _txIndex
+    ) public onlyOwner txExists(_txIndex) notExecuted(_txIndex) {
         Transaction storage transaction = transactions[_txIndex];
         require(
             transaction.confirmations >= requiredSignatures,
@@ -378,10 +386,9 @@ contract MultisigWallet is ReentrancyGuard {
         emit ExecuteTransaction(msg.sender, _txIndex);
     }
 
-    function submitSetRequiredSignatures(uint256 _newRequiredSignatures)
-        public
-        onlyOwner
-    {
+    function submitSetRequiredSignatures(
+        uint256 _newRequiredSignatures
+    ) public onlyOwner {
         require(
             _newRequiredSignatures > 0 &&
                 _newRequiredSignatures <= owners.length,
@@ -401,7 +408,9 @@ contract MultisigWallet is ReentrancyGuard {
         emit SubmitTransaction(msg.sender, txIndex);
     }
 
-    function confirmSetRequiredSignatures(uint256 _txIndex)
+    function confirmSetRequiredSignatures(
+        uint256 _txIndex
+    )
         public
         onlyOwner
         txExists(_txIndex)
@@ -415,12 +424,9 @@ contract MultisigWallet is ReentrancyGuard {
         emit ConfirmTransaction(msg.sender, _txIndex);
     }
 
-    function executeSetRequiredSignatures(uint256 _txIndex)
-        public
-        onlyOwner
-        txExists(_txIndex)
-        notExecuted(_txIndex)
-    {
+    function executeSetRequiredSignatures(
+        uint256 _txIndex
+    ) public onlyOwner txExists(_txIndex) notExecuted(_txIndex) {
         Transaction storage transaction = transactions[_txIndex];
         require(
             transaction.confirmations >= requiredSignatures,
@@ -453,7 +459,9 @@ contract MultisigWallet is ReentrancyGuard {
         return transactions.length;
     }
 
-    function getTransaction(uint256 _txIndex)
+    function getTransaction(
+        uint256 _txIndex
+    )
         public
         view
         returns (
