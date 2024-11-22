@@ -57,7 +57,6 @@ contract MultisigWallet is ReentrancyGuard {
     _;
 }
 
-
     modifier txExists(uint256 _txIndex) {
         require(_txIndex < transactions.length, "Transaction does not exist");
         _;
