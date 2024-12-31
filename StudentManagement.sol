@@ -37,7 +37,9 @@ contract StudentManagement {
             "Student ID already exists"
         );
 
+        // Tăng studentCount để đảm bảo ID duy nhất
         studentCount++;
+
         students.push(
             Student({
                 id: studentCount,
@@ -89,26 +91,27 @@ contract StudentManagement {
 
     function deleteStudent(uint256 id) public {
         require(id > 0 && id <= studentCount, "Student ID does not exist");
+        require(
+            studentIndexById[id] != 0 || (id == students[0].id),
+            "Student not found"
+        );
 
         uint256 index = studentIndexById[id];
-        uint256 lastIndex = students.length - 1;
+        Student memory studentToDelete = students[index];
 
+        uint256 lastIndex = students.length - 1;
         if (index != lastIndex) {
             Student memory lastStudent = students[lastIndex];
-
             students[index] = lastStudent;
-
             studentIndexById[lastStudent.id] = index;
         }
-
-        string memory studentIdToDelete = students[index].studentId;
 
         students.pop();
 
         delete studentIndexById[id];
-        delete studentExistsByStudentId[studentIdToDelete];
+        delete studentExistsByStudentId[studentToDelete.studentId];
 
-        emit StudentDeleted(id, studentIdToDelete);
+        emit StudentDeleted(id, studentToDelete.studentId);
     }
 
     function searchStudentsByName(
