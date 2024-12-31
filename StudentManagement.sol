@@ -72,14 +72,16 @@ contract StudentManagement {
         uint256 index = studentIndexById[id];
         require(index != 0 || (id == students[0].id), "Student not found");
 
-        require(
-            !studentExistsByStudentId[studentId] ||
-                keccak256(abi.encodePacked(studentId)) ==
-                keccak256(abi.encodePacked(students[index].studentId)),
-            "Student ID already exists"
-        );
-
         Student storage studentToUpdate = students[index];
+
+        if (!compareStrings(studentToUpdate.studentId, studentId)) {
+            delete studentExistsByStudentId[studentToUpdate.studentId];
+            require(
+                !studentExistsByStudentId[studentId],
+                "Student ID already exists"
+            );
+            studentExistsByStudentId[studentId] = true;
+        }
 
         studentToUpdate.studentId = studentId;
         studentToUpdate.fullName = fullName;
@@ -117,11 +119,10 @@ contract StudentManagement {
         emit StudentDeleted(id, studentToDelete.studentId);
     }
 
-    function searchStudentsByName(string memory name, uint256 page)
-        public
-        view
-        returns (Student[] memory results)
-    {
+    function searchStudentsByName(
+        string memory name,
+        uint256 page
+    ) public view returns (Student[] memory results) {
         uint256 pageSize = 10;
         uint256 startIndex = (page - 1) * pageSize;
         uint256 matchCount = 0;
@@ -151,11 +152,9 @@ contract StudentManagement {
         }
     }
 
-    function getAllStudents(uint256 page)
-        public
-        view
-        returns (Student[] memory results)
-    {
+    function getAllStudents(
+        uint256 page
+    ) public view returns (Student[] memory results) {
         uint256 pageSize = 10;
         uint256 totalStudents = students.length;
         uint256 startIndex = (page - 1) * pageSize;
@@ -171,11 +170,10 @@ contract StudentManagement {
         }
     }
 
-    function compareStrings(string memory a, string memory b)
-        internal
-        pure
-        returns (bool)
-    {
+    function compareStrings(
+        string memory a,
+        string memory b
+    ) internal pure returns (bool) {
         return keccak256(abi.encodePacked(a)) == keccak256(abi.encodePacked(b));
     }
 
