@@ -69,22 +69,34 @@ contract StudentManagement {
         string memory hometown,
         string memory permanentAddress
     ) public {
-        require(
-            studentExistsByStudentId[studentId],
-            "Student ID does not exist"
-        );
+
+        require(id > 0 && id <= studentCount, "Student ID does not exist");
 
         uint256 index = studentIndexById[id];
-        students[index] = Student({
-            id: id,
-            studentId: studentId,
-            fullName: fullName,
-            dateOfBirth: dateOfBirth,
-            gender: gender,
-            major: major,
-            hometown: hometown,
-            permanentAddress: permanentAddress
-        });
+        Student storage studentToUpdate = students[index];
+
+        studentExistsByStudentId[studentToUpdate.studentId] = false;
+
+        if (
+            keccak256(abi.encodePacked(studentToUpdate.studentId)) !=
+            keccak256(abi.encodePacked(studentId))
+        ) {
+            
+            require(
+                !studentExistsByStudentId[studentId], // Không cho phép trùng studentId
+                "Student ID already exists"
+            );
+        }
+
+        studentToUpdate.studentId = studentId;
+        studentToUpdate.fullName = fullName;
+        studentToUpdate.dateOfBirth = dateOfBirth;
+        studentToUpdate.gender = gender;
+        studentToUpdate.major = major;
+        studentToUpdate.hometown = hometown;
+        studentToUpdate.permanentAddress = permanentAddress;
+
+        studentExistsByStudentId[studentId] = true;
 
         emit StudentUpdated(id, studentId, fullName);
     }
@@ -114,10 +126,11 @@ contract StudentManagement {
         emit StudentDeleted(id, studentToDelete.studentId);
     }
 
-    function searchStudentsByName(
-        string memory name,
-        uint256 page
-    ) public view returns (Student[] memory results) {
+    function searchStudentsByName(string memory name, uint256 page)
+        public
+        view
+        returns (Student[] memory results)
+    {
         uint256 pageSize = 10;
         uint256 startIndex = (page - 1) * pageSize;
         uint256 matchCount = 0;
@@ -147,9 +160,11 @@ contract StudentManagement {
         }
     }
 
-    function getAllStudents(
-        uint256 page
-    ) public view returns (Student[] memory results) {
+    function getAllStudents(uint256 page)
+        public
+        view
+        returns (Student[] memory results)
+    {
         uint256 pageSize = 10;
         uint256 totalStudents = students.length;
         uint256 startIndex = (page - 1) * pageSize;
@@ -165,10 +180,11 @@ contract StudentManagement {
         }
     }
 
-    function compareStrings(
-        string memory a,
-        string memory b
-    ) internal pure returns (bool) {
+    function compareStrings(string memory a, string memory b)
+        internal
+        pure
+        returns (bool)
+    {
         return keccak256(abi.encodePacked(a)) == keccak256(abi.encodePacked(b));
     }
 
