@@ -37,7 +37,6 @@ contract StudentManagement {
             "Student ID already exists"
         );
 
-        // Tăng studentCount để đảm bảo ID duy nhất
         studentCount++;
 
         students.push(
@@ -69,24 +68,18 @@ contract StudentManagement {
         string memory hometown,
         string memory permanentAddress
     ) public {
-
         require(id > 0 && id <= studentCount, "Student ID does not exist");
-
         uint256 index = studentIndexById[id];
+        require(index != 0 || (id == students[0].id), "Student not found");
+
+        require(
+            !studentExistsByStudentId[studentId] ||
+                keccak256(abi.encodePacked(studentId)) ==
+                keccak256(abi.encodePacked(students[index].studentId)),
+            "Student ID already exists"
+        );
+
         Student storage studentToUpdate = students[index];
-
-        studentExistsByStudentId[studentToUpdate.studentId] = false;
-
-        if (
-            keccak256(abi.encodePacked(studentToUpdate.studentId)) !=
-            keccak256(abi.encodePacked(studentId))
-        ) {
-            
-            require(
-                !studentExistsByStudentId[studentId], // Không cho phép trùng studentId
-                "Student ID already exists"
-            );
-        }
 
         studentToUpdate.studentId = studentId;
         studentToUpdate.fullName = fullName;
@@ -95,8 +88,6 @@ contract StudentManagement {
         studentToUpdate.major = major;
         studentToUpdate.hometown = hometown;
         studentToUpdate.permanentAddress = permanentAddress;
-
-        studentExistsByStudentId[studentId] = true;
 
         emit StudentUpdated(id, studentId, fullName);
     }
