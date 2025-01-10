@@ -240,29 +240,26 @@ contract StudentManagement {
         return students.length;
     }
 
-    // Function to withdraw native tokens from the contract
-    function withdraw(uint256 _amount) external onlyOwner {
-        require(address(this).balance >= _amount, "Insufficient balance");
-        payable(owner).transfer(_amount);
-        emit Withdrawal(owner, _amount);
-    }
-
-    // Function to withdraw ERC20 tokens from the contract
-    function withdrawToken(address _token, uint256 _amount) external onlyOwner {
-        IERC20 token = IERC20(_token);
-        require(
-            token.balanceOf(address(this)) >= _amount,
-            "Insufficient balance"
-        );
-        require(token.transfer(owner, _amount), "Transfer failed");
-        emit TokenWithdrawal(_token, owner, _amount);
-    }
-
     function transferOwnership(address newOwner) external onlyOwner {
         require(newOwner != address(0), "New owner is the zero address");
         address previousOwner = owner;
         owner = newOwner;
         emit OwnershipTransferred(previousOwner, newOwner);
+    }
+
+    function withdraw(uint256 amount) public onlyOwner {
+        require(address(this).balance >= amount, "Insufficient balance");
+        payable(owner).transfer(amount);
+        emit Withdrawal(owner, amount);
+    }
+
+    function withdrawToken(address token, uint256 amount) public onlyOwner {
+        require(amount > 0, "Amount must be greater than 0");
+        IERC20 tokenContract = IERC20(token);
+        uint256 balance = tokenContract.balanceOf(address(this));
+        require(balance >= amount, "Insufficient token balance");
+        tokenContract.transfer(owner, amount);
+        emit TokenWithdrawal(token, owner, amount);
     }
 
     function getOwner() public view returns (address) {
