@@ -1,6 +1,15 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
 
+interface IERC20 {
+    function balanceOf(address account) external view returns (uint256);
+
+    function transfer(
+        address recipient,
+        uint256 amount
+    ) external returns (bool);
+}
+
 contract StudentManagement {
     struct Student {
         uint256 id;
@@ -18,10 +27,30 @@ contract StudentManagement {
     mapping(string => bool) private studentExistsByStudentId;
 
     uint256 private studentCount = 0;
+    address private owner;
 
     event StudentAdded(uint256 id, string studentId, string fullName);
     event StudentUpdated(uint256 id, string studentId, string fullName);
     event StudentDeleted(uint256 id, string studentId);
+    event Withdrawal(address indexed to, uint256 amount);
+    event TokenWithdrawal(
+        address indexed token,
+        address indexed to,
+        uint256 amount
+    );
+    event OwnershipTransferred(
+        address indexed previousOwner,
+        address indexed newOwner
+    );
+
+    modifier onlyOwner() {
+        require(msg.sender == owner, "Only the owner can perform this action");
+        _;
+    }
+
+    constructor() {
+        owner = msg.sender;
+    }
 
     function addStudent(
         string memory studentId,
@@ -31,7 +60,7 @@ contract StudentManagement {
         string memory major,
         string memory hometown,
         string memory permanentAddress
-    ) public {
+    ) public onlyOwner {
         require(
             !studentExistsByStudentId[studentId],
             "Student ID already exists"
@@ -67,7 +96,7 @@ contract StudentManagement {
         string memory major,
         string memory hometown,
         string memory permanentAddress
-    ) public {
+    ) public onlyOwner {
         require(id > 0 && id <= studentCount, "Student ID does not exist");
         uint256 index = studentIndexById[id];
         require(index != 0 || (id == students[0].id), "Student not found");
@@ -94,7 +123,7 @@ contract StudentManagement {
         emit StudentUpdated(id, studentId, fullName);
     }
 
-    function deleteStudent(uint256 id) public {
+    function deleteStudent(uint256 id) public onlyOwner {
         require(id > 0 && id <= studentCount, "Student ID does not exist");
         require(
             studentIndexById[id] != 0 || (id == students[0].id),
@@ -210,4 +239,35 @@ contract StudentManagement {
     function getTotalStudents() public view returns (uint256) {
         return students.length;
     }
+
+    // Function to withdraw native tokens from the contract
+    function withdraw(uint256 _amount) external onlyOwner {
+        require(address(this).balance >= _amount, "Insufficient balance");
+        payable(owner).transfer(_amount);
+        emit Withdrawal(owner, _amount);
+    }
+
+    // Function to withdraw ERC20 tokens from the contract
+    function withdrawToken(address _token, uint256 _amount) external onlyOwner {
+        IERC20 token = IERC20(_token);
+        require(
+            token.balanceOf(address(this)) >= _amount,
+            "Insufficient balance"
+        );
+        require(token.transfer(owner, _amount), "Transfer failed");
+        emit TokenWithdrawal(_token, owner, _amount);
+    }
+
+    function transferOwnership(address newOwner) external onlyOwner {
+        require(newOwner != address(0), "New owner is the zero address");
+        address previousOwner = owner;
+        owner = newOwner;
+        emit OwnershipTransferred(previousOwner, newOwner);
+    }
+
+    function getOwner() public view returns (address) {
+        return owner;
+    }
+
+    receive() external payable {}
 }
