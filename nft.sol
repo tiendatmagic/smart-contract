@@ -6,24 +6,30 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 
 contract MyNFT is ERC721URIStorage, Ownable {
     uint256 private _currentTokenId;
-
-    // Constructor to set the name and symbol of the NFT collection and the initial owner
-    constructor(address initialOwner) ERC721("Magic NFT", "NFT") Ownable(initialOwner) {}
+    string private _fixedTokenURI;
 
     /**
-     * @dev Mint a new NFT to the specified address with a token URI.
-     * @param to Address to receive the NFT.
-     * @param tokenURI URI of the token's metadata.
+     * @dev Constructor to initialize the NFT contract with a name, symbol, and fixed token URI.
+     * @param initialOwner Address of the initial owner.
+     * @param fixedTokenURI The IPFS URI for the token metadata.
      */
-    function mint(address to, string memory tokenURI) public onlyOwner {
+    constructor(address initialOwner, string memory fixedTokenURI) ERC721("Wrapper Tiendatmagic NFT", "NFTT") Ownable(initialOwner) {
+        _fixedTokenURI = fixedTokenURI;
+    }
+
+    /**
+     * @dev Mint a new NFT to the specified address with the fixed token URI.
+     * @param to Address to receive the NFT.
+     */
+    function mint(address to) public onlyOwner {
         // Increment the token ID counter
         _currentTokenId++;
 
         // Mint the NFT to the specified address
         _safeMint(to, _currentTokenId);
 
-        // Set the token URI for the newly minted NFT
-        _setTokenURI(_currentTokenId, tokenURI);
+        // Set the fixed token URI for the newly minted NFT
+        _setTokenURI(_currentTokenId, _fixedTokenURI);
     }
 
     /**
@@ -32,5 +38,13 @@ contract MyNFT is ERC721URIStorage, Ownable {
      */
     function getCurrentTokenId() public view returns (uint256) {
         return _currentTokenId;
+    }
+
+    /**
+     * @dev Get the fixed token URI.
+     * @return The fixed token URI.
+     */
+    function getFixedTokenURI() public view returns (string memory) {
+        return _fixedTokenURI;
     }
 }
