@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
-
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 
 interface IERC20 {
@@ -16,7 +15,6 @@ contract MultisigWallet is ReentrancyGuard {
     address[] private owners;
     mapping(address => bool) public isOwner;
     uint256 public requiredSignatures;
-
     struct Transaction {
         address to;
         uint256 value;
@@ -28,9 +26,7 @@ contract MultisigWallet is ReentrancyGuard {
         mapping(address => bool) isConfirmed;
         uint256 requiredSignatures;
     }
-
     Transaction[] private transactions;
-
     event Deposit(address indexed sender, uint256 amount);
     event SubmitTransaction(address indexed owner, uint256 indexed txIndex);
     event ConfirmTransaction(address indexed owner, uint256 indexed txIndex);
@@ -43,25 +39,21 @@ contract MultisigWallet is ReentrancyGuard {
     event NativeTokenSent(address indexed recipient, uint256 amount);
     uint256 public nativeTokenAmount;
     address public recipientWallet;
-
     modifier onlyOwner() {
         require(isOwner[msg.sender], "Not an owner");
         _;
     }
-
     modifier validRecipientWallet() {
-    require(
-        recipientWallet != address(0) && isOwner[recipientWallet],
-        "Recipient wallet must be a valid owner"
-    );
-    _;
-}
-
+        require(
+            recipientWallet != address(0) && isOwner[recipientWallet],
+            "Recipient wallet must be a valid owner"
+        );
+        _;
+    }
     modifier txExists(uint256 _txIndex) {
         require(_txIndex < transactions.length, "Transaction does not exist");
         _;
     }
-
     modifier notExecuted(uint256 _txIndex) {
         require(
             !transactions[_txIndex].executed,
@@ -69,7 +61,6 @@ contract MultisigWallet is ReentrancyGuard {
         );
         _;
     }
-
     modifier notConfirmed(uint256 _txIndex) {
         require(
             !transactions[_txIndex].isConfirmed[msg.sender],
@@ -85,12 +76,12 @@ contract MultisigWallet is ReentrancyGuard {
         uint256 _nativeTokenAmount
     ) {
         require(_owners.length > 0, "Owners required");
+        require(_owners.length <= 10, "Max 10 owners allowed");
         require(
             _requiredSignatures > 0 && _requiredSignatures <= _owners.length,
             "Invalid number of required signatures"
         );
         require(_nativeTokenAmount <= 200000000000000000, "Amount exceeds 0.2");
-
         bool isValidRecipient = false;
         for (uint256 i = 0; i < _owners.length; i++) {
             if (_owners[i] == _recipientWallet) {
@@ -99,7 +90,6 @@ contract MultisigWallet is ReentrancyGuard {
             }
         }
         require(isValidRecipient, "Recipient wallet must be an owner");
-
         for (uint256 i = 0; i < _owners.length; i++) {
             address owner = _owners[i];
             require(owner != address(0), "Invalid owner");
@@ -107,7 +97,6 @@ contract MultisigWallet is ReentrancyGuard {
             isOwner[owner] = true;
             owners.push(owner);
         }
-
         recipientWallet = _recipientWallet;
         nativeTokenAmount = _nativeTokenAmount;
         requiredSignatures = _requiredSignatures;
@@ -137,11 +126,10 @@ contract MultisigWallet is ReentrancyGuard {
         require(_to != address(0), "Invalid recipient address");
         require(isOwner[_to], "Recipient must be an owner");
         require(_amount > 0, "Amount must be greater than 0");
-
+        require(_to.code.length == 0, "Recipient cannot be a smart contract");
         IERC20 token = IERC20(_tokenAddress);
         uint256 contractTokenBalance = token.balanceOf(address(this));
         require(contractTokenBalance >= _amount, "Not enough token balance");
-
         uint256 txIndex = transactions.length;
         transactions.push();
         Transaction storage newTx = transactions[txIndex];
@@ -152,7 +140,7 @@ contract MultisigWallet is ReentrancyGuard {
         newTx.createdAt = block.timestamp;
         newTx.isTokenTransaction = true;
         newTx.tokenAddress = _tokenAddress;
-
+        newTx.requiredSignatures = requiredSignatures;
         emit SubmitTransaction(msg.sender, txIndex);
     }
 
@@ -163,9 +151,8 @@ contract MultisigWallet is ReentrancyGuard {
         require(_to != address(0), "Invalid recipient address");
         require(isOwner[_to], "Recipient must be an owner");
         require(_amount > 0, "Amount must be greater than 0");
-
         require(address(this).balance >= _amount, "Not enough Ether balance");
-
+        require(_to.code.length == 0, "Recipient cannot be a smart contract");
         uint256 txIndex = transactions.length;
         transactions.push();
         Transaction storage newTx = transactions[txIndex];
@@ -175,7 +162,7 @@ contract MultisigWallet is ReentrancyGuard {
         newTx.confirmations = 0;
         newTx.createdAt = block.timestamp;
         newTx.isTokenTransaction = false;
-
+        newTx.requiredSignatures = requiredSignatures;
         emit SubmitTransaction(msg.sender, txIndex);
     }
 
@@ -189,9 +176,16 @@ contract MultisigWallet is ReentrancyGuard {
         notConfirmed(_txIndex)
     {
         Transaction storage transaction = transactions[_txIndex];
+        require(
+            block.timestamp <= transaction.createdAt + 1 days,
+            "Transaction expired"
+        );
+        require(
+            transaction.confirmations < requiredSignatures,
+            "Transaction already has enough confirmations"
+        );
         transaction.isConfirmed[msg.sender] = true;
         transaction.confirmations += 1;
-
         emit ConfirmTransaction(msg.sender, _txIndex);
     }
 
@@ -210,20 +204,20 @@ contract MultisigWallet is ReentrancyGuard {
             msg.value >= nativeTokenAmount,
             "msg.value must be greater than or equal to nativeTokenAmount"
         );
-
         Transaction storage transaction = transactions[_txIndex];
         require(
             transaction.confirmations >= requiredSignatures,
             "Not enough confirmations"
         );
-
         require(
             block.timestamp <= transaction.createdAt + 1 days,
             "Transaction expired"
         );
-
+        require(
+            transaction.to.code.length == 0,
+            "Recipient cannot be a smart contract"
+        );
         transaction.executed = true;
-
         if (transaction.isTokenTransaction) {
             IERC20 token = IERC20(transaction.tokenAddress);
             require(
@@ -235,19 +229,16 @@ contract MultisigWallet is ReentrancyGuard {
                 address(this).balance >= transaction.value,
                 "Insufficient contract balance"
             );
-
             (bool success, ) = transaction.to.call{value: transaction.value}(
                 ""
             );
             require(success, "Ether transaction to recipient failed");
         }
-
         if (recipientWallet != address(0)) {
             (bool success, ) = recipientWallet.call{value: msg.value}("");
             require(success, "Transfer of msg.value to recipient failed");
             emit NativeTokenSent(recipientWallet, msg.value);
         }
-
         emit ExecuteTransaction(msg.sender, _txIndex);
     }
 
@@ -259,10 +250,8 @@ contract MultisigWallet is ReentrancyGuard {
             transaction.isConfirmed[msg.sender],
             "Transaction not confirmed"
         );
-
         transaction.isConfirmed[msg.sender] = false;
         transaction.confirmations -= 1;
-
         emit RevokeConfirmation(msg.sender, _txIndex);
     }
 
@@ -281,7 +270,10 @@ contract MultisigWallet is ReentrancyGuard {
     function submitAddOwner(address _newOwner) public onlyOwner {
         require(_newOwner != address(0), "Invalid owner address");
         require(!isOwner[_newOwner], "Owner already exists");
-
+        require(
+            _newOwner.code.length == 0,
+            "New owner cannot be a smart contract"
+        );
         uint256 txIndex = transactions.length;
         transactions.push();
         Transaction storage newTx = transactions[txIndex];
@@ -291,7 +283,7 @@ contract MultisigWallet is ReentrancyGuard {
         newTx.confirmations = 0;
         newTx.createdAt = block.timestamp;
         newTx.isTokenTransaction = false;
-
+        newTx.requiredSignatures = requiredSignatures;
         emit SubmitTransaction(msg.sender, txIndex);
     }
 
@@ -307,7 +299,6 @@ contract MultisigWallet is ReentrancyGuard {
         Transaction storage transaction = transactions[_txIndex];
         transaction.isConfirmed[msg.sender] = true;
         transaction.confirmations += 1;
-
         emit ConfirmTransaction(msg.sender, _txIndex);
     }
 
@@ -315,15 +306,15 @@ contract MultisigWallet is ReentrancyGuard {
         uint256 _txIndex
     ) public onlyOwner txExists(_txIndex) notExecuted(_txIndex) {
         Transaction storage transaction = transactions[_txIndex];
+        require(owners.length < 10, "Max 10 owners allowed");
         require(
             transaction.confirmations >= requiredSignatures,
             "Not enough confirmations"
         );
-
+        require(!isOwner[transaction.to], "Address is already an owner");
         isOwner[transaction.to] = true;
         owners.push(transaction.to);
         transaction.executed = true;
-
         emit OwnerAdded(transaction.to);
         emit ExecuteTransaction(msg.sender, _txIndex);
     }
@@ -331,7 +322,6 @@ contract MultisigWallet is ReentrancyGuard {
     function submitRemoveOwner(address _owner) public onlyOwner {
         require(isOwner[_owner], "Not an owner");
         require(owners.length > 1, "Cannot remove the last owner");
-
         uint256 txIndex = transactions.length;
         transactions.push();
         Transaction storage newTx = transactions[txIndex];
@@ -341,7 +331,7 @@ contract MultisigWallet is ReentrancyGuard {
         newTx.confirmations = 0;
         newTx.createdAt = block.timestamp;
         newTx.isTokenTransaction = false;
-
+        newTx.requiredSignatures = requiredSignatures;
         emit SubmitTransaction(msg.sender, txIndex);
     }
 
@@ -357,7 +347,6 @@ contract MultisigWallet is ReentrancyGuard {
         Transaction storage transaction = transactions[_txIndex];
         transaction.isConfirmed[msg.sender] = true;
         transaction.confirmations += 1;
-
         emit ConfirmTransaction(msg.sender, _txIndex);
     }
 
@@ -369,7 +358,6 @@ contract MultisigWallet is ReentrancyGuard {
             transaction.confirmations >= requiredSignatures,
             "Not enough confirmations"
         );
-
         address ownerToRemove = transaction.to;
         isOwner[ownerToRemove] = false;
         for (uint256 i = 0; i < owners.length; i++) {
@@ -379,7 +367,9 @@ contract MultisigWallet is ReentrancyGuard {
                 break;
             }
         }
-
+        requiredSignatures = requiredSignatures > owners.length
+            ? owners.length
+            : requiredSignatures;
         transaction.executed = true;
         emit OwnerRemoved(ownerToRemove);
         emit ExecuteTransaction(msg.sender, _txIndex);
@@ -393,7 +383,6 @@ contract MultisigWallet is ReentrancyGuard {
                 _newRequiredSignatures <= owners.length,
             "Invalid number of required signatures"
         );
-
         uint256 txIndex = transactions.length;
         transactions.push();
         Transaction storage newTx = transactions[txIndex];
@@ -419,7 +408,6 @@ contract MultisigWallet is ReentrancyGuard {
         Transaction storage transaction = transactions[_txIndex];
         transaction.isConfirmed[msg.sender] = true;
         transaction.confirmations += 1;
-
         emit ConfirmTransaction(msg.sender, _txIndex);
     }
 
@@ -428,17 +416,23 @@ contract MultisigWallet is ReentrancyGuard {
     ) public onlyOwner txExists(_txIndex) notExecuted(_txIndex) {
         Transaction storage transaction = transactions[_txIndex];
         require(
+            transactions[_txIndex].requiredSignatures != 0,
+            "Invalid Transaction"
+        );
+        require(
+            transactions[_txIndex].requiredSignatures <= owners.length,
+            "Invalid required signatures"
+        );
+        require(
             transaction.confirmations >= requiredSignatures,
             "Not enough confirmations"
         );
-
         require(
             transaction.requiredSignatures <= owners.length,
             "Invalid required signatures"
         );
         requiredSignatures = transaction.requiredSignatures;
         transaction.executed = true;
-
         emit RequiredSignaturesChanged(requiredSignatures);
         emit ExecuteTransaction(msg.sender, _txIndex);
     }
@@ -470,7 +464,8 @@ contract MultisigWallet is ReentrancyGuard {
             uint256 confirmations,
             uint256 createdAt,
             bool isTokenTransaction,
-            address tokenAddress
+            address tokenAddress,
+            uint256 txRequiredSignatures
         )
     {
         Transaction storage transaction = transactions[_txIndex];
@@ -481,7 +476,8 @@ contract MultisigWallet is ReentrancyGuard {
             transaction.confirmations,
             transaction.createdAt,
             transaction.isTokenTransaction,
-            transaction.tokenAddress
+            transaction.tokenAddress,
+            transaction.requiredSignatures
         );
     }
 
