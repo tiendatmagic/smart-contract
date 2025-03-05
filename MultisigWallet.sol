@@ -263,6 +263,9 @@ contract MultisigWallet is ReentrancyGuard {
             block.timestamp > transaction.createdAt + 1 days,
             "Transaction is still valid"
         );
+        for (uint256 i = 0; i < owners.length; i++) {
+            transaction.isConfirmed[owners[i]] = false;
+        }
         transaction.confirmations = 0;
         emit CancelTransaction(msg.sender, _txIndex);
     }
@@ -306,6 +309,10 @@ contract MultisigWallet is ReentrancyGuard {
         uint256 _txIndex
     ) public onlyOwner txExists(_txIndex) notExecuted(_txIndex) {
         Transaction storage transaction = transactions[_txIndex];
+        require(
+            block.timestamp <= transaction.createdAt + 1 days,
+            "Transaction expired"
+        );
         require(owners.length < 10, "Max 10 owners allowed");
         require(
             transaction.confirmations >= requiredSignatures,
@@ -354,6 +361,10 @@ contract MultisigWallet is ReentrancyGuard {
         uint256 _txIndex
     ) public onlyOwner txExists(_txIndex) notExecuted(_txIndex) {
         Transaction storage transaction = transactions[_txIndex];
+        require(
+            block.timestamp <= transaction.createdAt + 1 days,
+            "Transaction expired"
+        );
         require(
             transaction.confirmations >= requiredSignatures,
             "Not enough confirmations"
@@ -415,6 +426,10 @@ contract MultisigWallet is ReentrancyGuard {
         uint256 _txIndex
     ) public onlyOwner txExists(_txIndex) notExecuted(_txIndex) {
         Transaction storage transaction = transactions[_txIndex];
+        require(
+            block.timestamp <= transaction.createdAt + 1 days,
+            "Transaction expired"
+        );
         require(
             transactions[_txIndex].requiredSignatures != 0,
             "Invalid Transaction"
