@@ -14,8 +14,8 @@ interface IERC20 {
 contract MultisigWallet is ReentrancyGuard {
     address[] private owners;
     mapping(address => bool) public isOwner;
-    mapping(uint256 => uint256) public cancelVotes;
-    mapping(uint256 => mapping(address => bool)) public hasVotedCancel;
+    mapping(uint256 => uint256) private cancelVotes;
+    mapping(uint256 => mapping(address => bool)) private hasVotedCancel;
     uint256 public requiredSignatures;
     struct Transaction {
         address to;
