@@ -14,6 +14,8 @@ interface IERC20 {
 contract MultisigWallet is ReentrancyGuard {
     address[] private owners;
     mapping(address => bool) public isOwner;
+    mapping(uint256 => uint256) public cancelVotes;
+    mapping(uint256 => mapping(address => bool)) public hasVotedCancel;
     uint256 public requiredSignatures;
     struct Transaction {
         address to;
@@ -214,13 +216,26 @@ contract MultisigWallet is ReentrancyGuard {
     ) public onlyOwner txExists(_txIndex) notExecuted(_txIndex) {
         Transaction storage transaction = transactions[_txIndex];
         require(
-            block.timestamp > transaction.createdAt + 1 days,
-            "Transaction is still valid"
+            transaction.confirmations < requiredSignatures,
+            "Cannot cancel fully confirmed tx"
         );
-        for (uint256 i = 0; i < owners.length; i++) {
-            transaction.isConfirmed[owners[i]] = false;
+        require(
+            cancelVotes[_txIndex] < requiredSignatures,
+            "Already enough votes to cancel"
+        );
+        require(
+            !hasVotedCancel[_txIndex][msg.sender],
+            "Already voted to cancel"
+        );
+        hasVotedCancel[_txIndex][msg.sender] = true;
+        cancelVotes[_txIndex] += 1;
+        if (cancelVotes[_txIndex] >= requiredSignatures) {
+            for (uint256 i = 0; i < owners.length; i++) {
+                transaction.isConfirmed[owners[i]] = false;
+            }
+            transaction.confirmations = 0;
+            cancelVotes[_txIndex] = 0;
         }
-        transaction.confirmations = 0;
         emit CancelTransaction(msg.sender, _txIndex);
     }
 
