@@ -22,10 +22,11 @@ library StringUtils {
         return string(bLower);
     }
 
-    function contains(
-        string memory what,
-        string memory substr
-    ) internal pure returns (bool) {
+    function contains(string memory what, string memory substr)
+        internal
+        pure
+        returns (bool)
+    {
         bytes memory whatBytes = bytes(what);
         bytes memory substrBytes = bytes(substr);
 
@@ -133,17 +134,19 @@ contract EventTicketNFT is ERC721, ReentrancyGuard, Ownable {
         emit EventStatusUpdated(_eventId, _newStatus);
     }
 
-    function updateBaseTokenURI(
-        uint256 _eventId,
-        string memory _newURI
-    ) external {
+    function updateBaseTokenURI(uint256 _eventId, string memory _newURI)
+        external
+    {
         require(events[_eventId].creator == msg.sender);
         events[_eventId].baseTokenURI = _newURI;
     }
 
-    function tokenURI(
-        uint256 tokenId
-    ) public view override returns (string memory) {
+    function tokenURI(uint256 tokenId)
+        public
+        view
+        override
+        returns (string memory)
+    {
         require(_ownerOf(tokenId) != address(0));
         uint256 eventId = ticketToEvent[tokenId];
         return string(abi.encodePacked(events[eventId].baseTokenURI));
@@ -191,10 +194,7 @@ contract EventTicketNFT is ERC721, ReentrancyGuard, Ownable {
         emit CheckedIn(_eventId, _tokenId, msg.sender, block.timestamp);
     }
 
-    function getCheckInInfo(
-        uint256 eventId,
-        uint256 tokenId
-    )
+    function getCheckInInfo(uint256 eventId, uint256 tokenId)
         external
         view
         returns (
@@ -240,10 +240,11 @@ contract EventTicketNFT is ERC721, ReentrancyGuard, Ownable {
         return result;
     }
 
-    function getEventTicketsWithName(
-        address user,
-        uint256 eventId
-    ) external view returns (uint256[] memory, string memory) {
+    function getEventTicketsWithName(address user, uint256 eventId)
+        external
+        view
+        returns (uint256[] memory, string memory)
+    {
         uint256[] memory allTickets = ticketsByOwner[user];
         uint256 count = 0;
         for (uint256 i = 0; i < allTickets.length; i++) {
@@ -278,154 +279,162 @@ contract EventTicketNFT is ERC721, ReentrancyGuard, Ownable {
         emit TicketUncancelled(eventId, tokenId);
     }
 
-    function withdrawTokenNative(
-        uint256 amount
-    ) external onlyOwner nonReentrant {
-        require(amount > 0, "Amount must be greater than 0");
-        require(
-            address(this).balance >= amount,
-            "Insufficient native token balance"
-        );
+    function withdrawTokenNative(uint256 amount)
+        external
+        onlyOwner
+        nonReentrant
+    {
+        require(amount > 0);
+        require(address(this).balance >= amount);
 
         (bool success, ) = payable(owner()).call{value: amount}("");
-        require(success, "Native token transfer failed");
+        require(success);
     }
 
-    function withdrawToken(
-        address tokenContract,
-        uint256 amount
-    ) external onlyOwner nonReentrant {
+    function withdrawToken(address tokenContract, uint256 amount)
+        external
+        onlyOwner
+        nonReentrant
+    {
         require(amount > 0);
         require(tokenContract != address(0));
 
         IERC20 token = IERC20(tokenContract);
         uint256 balance = token.balanceOf(address(this));
-        require(balance >= amount, "Insufficient token balance");
+        require(balance >= amount);
 
         bool success = token.transfer(owner(), amount);
-        require(success, "Token transfer failed");
+        require(success);
     }
 
-    function getEventsByPage(
-        uint256 pageNumber
-    )
+    function getEventsByPage(uint256 pageNumber, uint8 status)
         external
         view
-        returns (
-            uint256[] memory eventIds,
-            string[] memory eventNames,
-            uint256[] memory maxTickets,
-            uint256[] memory ticketsSold,
-            uint256[] memory eventTimes,
-            address[] memory creators,
-            string[] memory baseTokenURIs,
-            uint8[] memory statuses
-        )
+        returns (string[] memory eventDetails)
     {
         require(pageNumber > 0, "Page number must be greater than 0");
+        require(status == 0 || status == 1, "Invalid status");
+
+        eventDetails = new string[](10);
+        uint256 count = 0;
+        uint256 eventsProcessed = 0;
         uint256 startIndex = (pageNumber - 1) * 10;
-        uint256 endIndex = startIndex + 10;
-        if (endIndex > eventCounter) endIndex = eventCounter;
-        if (startIndex >= eventCounter) {
-            return (
-                new uint256[](0),
-                new string[](0),
-                new uint256[](0),
-                new uint256[](0),
-                new uint256[](0),
-                new address[](0),
-                new string[](0),
-                new uint8[](0)
-            );
+
+        for (uint256 i = eventCounter; i >= 1 && count < 10; i--) {
+            if (events[i].status == status) {
+                eventsProcessed++;
+                if (eventsProcessed > startIndex) {
+                    Event memory evt = events[i];
+                    eventDetails[count] = string(
+                        abi.encodePacked(
+                            uintToString(evt.eventId),
+                            ",",
+                            evt.eventName,
+                            ",",
+                            uintToString(evt.maxTickets),
+                            ",",
+                            uintToString(evt.ticketsSold),
+                            ",",
+                            uintToString(evt.eventTime),
+                            ",",
+                            addressToString(evt.creator),
+                            ",",
+                            evt.baseTokenURI,
+                            ",",
+                            uintToString(evt.status)
+                        )
+                    );
+                    count++;
+                }
+            }
+            if (i == 1) break;
         }
-        uint256 length = endIndex - startIndex;
-        eventIds = new uint256[](length);
-        eventNames = new string[](length);
-        maxTickets = new uint256[](length);
-        ticketsSold = new uint256[](length);
-        eventTimes = new uint256[](length);
-        creators = new address[](length);
-        baseTokenURIs = new string[](length);
-        statuses = new uint8[](length);
-        for (uint256 i = 0; i < length; i++) {
-            uint256 eventId = startIndex + i + 1;
-            Event memory evt = events[eventId];
-            eventIds[i] = evt.eventId;
-            eventNames[i] = evt.eventName;
-            maxTickets[i] = evt.maxTickets;
-            ticketsSold[i] = evt.ticketsSold;
-            eventTimes[i] = evt.eventTime;
-            creators[i] = evt.creator;
-            baseTokenURIs[i] = evt.baseTokenURI;
-            statuses[i] = evt.status;
+
+        return eventDetails;
+    }
+
+    function uintToString(uint256 value) internal pure returns (string memory) {
+        if (value == 0) return "0";
+        uint256 temp = value;
+        uint256 digits;
+        while (temp != 0) {
+            digits++;
+            temp /= 10;
         }
-        return (
-            eventIds,
-            eventNames,
-            maxTickets,
-            ticketsSold,
-            eventTimes,
-            creators,
-            baseTokenURIs,
-            statuses
-        );
+        bytes memory buffer = new bytes(digits);
+        while (value != 0) {
+            digits--;
+            buffer[digits] = bytes1(uint8(48 + (value % 10)));
+            value /= 10;
+        }
+        return string(buffer);
+    }
+
+    function addressToString(address addr)
+        internal
+        pure
+        returns (string memory)
+    {
+        bytes32 value = bytes32(uint256(uint160(addr)));
+        bytes memory alphabet = "0123456789abcdef";
+        bytes memory str = new bytes(42);
+        str[0] = "0";
+        str[1] = "x";
+        for (uint256 i = 0; i < 20; i++) {
+            str[2 + i * 2] = alphabet[uint8(value[i + 12] >> 4)];
+            str[3 + i * 2] = alphabet[uint8(value[i + 12] & 0x0f)];
+        }
+        return string(str);
     }
 
     function searchEventsByName(
+        uint256 pageNumber,
+        uint8 status,
         string memory searchTerm
-    )
-        external
-        view
-        returns (
-            uint256[] memory eventIds,
-            string[] memory eventNames,
-            uint256[] memory maxTickets,
-            uint256[] memory ticketsSold,
-            uint256[] memory eventTimes,
-            address[] memory creators,
-            string[] memory baseTokenURIs,
-            uint8[] memory statuses
-        )
-    {
-        uint256 matchCount = 0;
-        for (uint256 i = 1; i <= eventCounter; i++) {
-            if (events[i].eventName.toLower().contains(searchTerm.toLower())) {
-                matchCount++;
+    ) external view returns (string[] memory eventDetails) {
+        require(pageNumber > 0, "Page number must be greater than 0");
+        require(status == 0 || status == 1, "Invalid status");
+
+        eventDetails = new string[](10);
+        uint256 count = 0;
+        uint256 eventsProcessed = 0;
+        uint256 startIndex = (pageNumber - 1) * 10;
+
+        for (uint256 i = eventCounter; i >= 1 && count < 10; i--) {
+            if (
+                events[i].status == status &&
+                events[i].eventName.toLower().contains(searchTerm.toLower())
+            ) {
+                eventsProcessed++;
+                if (eventsProcessed > startIndex) {
+                    Event memory evt = events[i];
+                    eventDetails[count] = string(
+                        abi.encodePacked(
+                            uintToString(evt.eventId),
+                            ",",
+                            evt.eventName,
+                            ",",
+                            uintToString(evt.maxTickets),
+                            ",",
+                            uintToString(evt.ticketsSold),
+                            ",",
+                            uintToString(evt.eventTime),
+                            ",",
+                            addressToString(evt.creator),
+                            ",",
+                            evt.baseTokenURI,
+                            ",",
+                            uintToString(evt.status)
+                        )
+                    );
+                    count++;
+                }
             }
+
+            if (i == 1) break;
         }
-        eventIds = new uint256[](matchCount);
-        eventNames = new string[](matchCount);
-        maxTickets = new uint256[](matchCount);
-        ticketsSold = new uint256[](matchCount);
-        eventTimes = new uint256[](matchCount);
-        creators = new address[](matchCount);
-        baseTokenURIs = new string[](matchCount);
-        statuses = new uint8[](matchCount);
-        uint256 index = 0;
-        for (uint256 i = 1; i <= eventCounter; i++) {
-            if (events[i].eventName.toLower().contains(searchTerm.toLower())) {
-                Event memory evt = events[i];
-                eventIds[index] = evt.eventId;
-                eventNames[index] = evt.eventName;
-                maxTickets[index] = evt.maxTickets;
-                ticketsSold[index] = evt.ticketsSold;
-                eventTimes[index] = evt.eventTime;
-                creators[index] = evt.creator;
-                baseTokenURIs[index] = evt.baseTokenURI;
-                statuses[index] = evt.status;
-                index++;
-            }
-        }
-        return (
-            eventIds,
-            eventNames,
-            maxTickets,
-            ticketsSold,
-            eventTimes,
-            creators,
-            baseTokenURIs,
-            statuses
-        );
+
+        return eventDetails;
     }
 
     function renounceOwnership() public view override onlyOwner {
