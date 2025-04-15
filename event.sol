@@ -4,9 +4,9 @@ pragma solidity ^0.8.29;
 import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol"; // Thêm import cho ERC20
 
-
-contract EventTicketNFT is ERC721, ReentrancyGuard {
+contract EventTicketNFT is ERC721, ReentrancyGuard, Ownable {
     struct MyTicketInfo {
         uint256 tokenId;
         uint256 eventId;
@@ -55,8 +55,9 @@ contract EventTicketNFT is ERC721, ReentrancyGuard {
     event TicketCancelled(uint256 indexed eventId, uint256 indexed tokenId);
     event TicketUncancelled(uint256 indexed eventId, uint256 indexed tokenId);
 
+    constructor() ERC721("EventTicketNFT", "ETN") Ownable(msg.sender) {}
 
-    constructor() ERC721("EventTicketNFT", "ETN") {}
+    receive() external payable {}
 
     function createEvent(
         string memory _eventName,
@@ -88,17 +89,19 @@ contract EventTicketNFT is ERC721, ReentrancyGuard {
         emit EventStatusUpdated(_eventId, _newStatus);
     }
 
-    function updateBaseTokenURI(
-        uint256 _eventId,
-        string memory _newURI
-    ) external {
+    function updateBaseTokenURI(uint256 _eventId, string memory _newURI)
+        external
+    {
         require(events[_eventId].creator == msg.sender, "Not event creator");
         events[_eventId].baseTokenURI = _newURI;
     }
 
-    function tokenURI(
-        uint256 tokenId
-    ) public view override returns (string memory) {
+    function tokenURI(uint256 tokenId)
+        public
+        view
+        override
+        returns (string memory)
+    {
         require(_ownerOf(tokenId) != address(0), "Token does not exist");
         uint256 eventId = ticketToEvent[tokenId];
         string memory base = events[eventId].baseTokenURI;
@@ -189,10 +192,7 @@ contract EventTicketNFT is ERC721, ReentrancyGuard {
         emit CheckedIn(_eventId, _tokenId, msg.sender, block.timestamp);
     }
 
-    function getCheckInInfo(
-        uint256 eventId,
-        uint256 tokenId
-    )
+    function getCheckInInfo(uint256 eventId, uint256 tokenId)
         external
         view
         returns (
@@ -258,10 +258,11 @@ contract EventTicketNFT is ERC721, ReentrancyGuard {
     }
 
     // (Bonus) Lấy vé theo sự kiện của người dùng cụ thể
-    function getEventTicketsWithName(
-        address user,
-        uint256 eventId
-    ) external view returns (uint256[] memory, string memory) {
+    function getEventTicketsWithName(address user, uint256 eventId)
+        external
+        view
+        returns (uint256[] memory, string memory)
+    {
         uint256[] memory allTickets = ticketsByOwner[user];
         uint256 count = 0;
 
@@ -294,7 +295,7 @@ contract EventTicketNFT is ERC721, ReentrancyGuard {
         emit TicketCancelled(eventId, tokenId);
     }
 
-   function unCancelTicket(uint256 eventId, uint256 tokenId) external {
+    function unCancelTicket(uint256 eventId, uint256 tokenId) external {
         require(ticketToEvent[tokenId] == eventId, "Token not for this event");
         require(events[eventId].creator == msg.sender, "Not event creator");
         require(isTicketCancelled[tokenId], "Ticket is not cancelled");
@@ -302,5 +303,42 @@ contract EventTicketNFT is ERC721, ReentrancyGuard {
         isTicketCancelled[tokenId] = false;
 
         emit TicketUncancelled(eventId, tokenId); // Sửa lại sự kiện
+    }
+
+    // Rút token native (ETH hoặc token native của blockchain)
+    function withdrawTokenNative(uint256 amount)
+        external
+        onlyOwner
+        nonReentrant
+    {
+        require(amount > 0, "Amount must be greater than 0");
+        require(
+            address(this).balance >= amount,
+            "Insufficient native token balance"
+        );
+
+        (bool success, ) = payable(owner()).call{value: amount}("");
+        require(success, "Native token transfer failed");
+    }
+
+    // Rút token ERC20
+    function withdrawToken(address tokenContract, uint256 amount)
+        external
+        onlyOwner
+        nonReentrant
+    {
+        require(amount > 0, "Amount must be greater than 0");
+        require(tokenContract != address(0), "Invalid token contract address");
+
+        IERC20 token = IERC20(tokenContract);
+        uint256 balance = token.balanceOf(address(this));
+        require(balance >= amount, "Insufficient token balance");
+
+        bool success = token.transfer(owner(), amount);
+        require(success, "Token transfer failed");
+    }
+
+    function renounceOwnership() public view override onlyOwner {
+        revert("Renouncing ownership is disabled");
     }
 }
