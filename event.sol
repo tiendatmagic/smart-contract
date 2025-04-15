@@ -307,6 +307,48 @@ contract EventTicketNFT is ERC721, ReentrancyGuard, Ownable {
         require(success);
     }
 
+    function getEventDetails(
+    uint256 eventId
+)
+    external
+    view
+    returns (
+        uint256 _eventId,
+        string memory eventName,
+        uint256 maxTickets,
+        uint256 ticketsSold,
+        uint256 eventTime,
+        address creator,
+        string memory baseTokenURI,
+        uint8 status,
+        uint256 checkedInCount,
+        uint256 notCheckedInCount
+    )
+{
+    Event memory evt = events[eventId];
+    require(evt.eventId != 0, "Event does not exist");
+
+    uint256 checkedInUsers = 0;
+
+    for (uint256 i = 1; i <= ticketIdCounter; i++) {
+        if (ticketToEvent[i] == eventId && checkedIn[i]) {
+            checkedInUsers++;
+        }
+    }
+
+    _eventId = evt.eventId;
+    eventName = evt.eventName;
+    maxTickets = evt.maxTickets;
+    ticketsSold = evt.ticketsSold;
+    eventTime = evt.eventTime;
+    creator = evt.creator;
+    baseTokenURI = evt.baseTokenURI;
+    status = evt.status;
+    checkedInCount = checkedInUsers;
+    notCheckedInCount = evt.ticketsSold - checkedInUsers;
+}
+
+
     function getEventsByPage(uint256 pageNumber, uint8 status)
         external
         view
