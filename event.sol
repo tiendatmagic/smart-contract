@@ -3,8 +3,16 @@ pragma solidity ^0.8.29;
 
 import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
+
 
 contract EventTicketNFT is ERC721, ReentrancyGuard {
+    struct MyTicketInfo {
+        uint256 tokenId;
+        uint256 eventId;
+        bool checkedIn;
+        uint256 checkInTime;
+    }
     struct Event {
         uint256 eventId;
         string eventName;
@@ -13,16 +21,18 @@ contract EventTicketNFT is ERC721, ReentrancyGuard {
         uint256 eventTime;
         address creator;
         string baseTokenURI;
+        uint8 status;
     }
 
     uint256 public eventCounter;
     uint256 public ticketIdCounter;
 
     mapping(uint256 => Event) public events; // eventId => Event
-    mapping(uint256 => uint256) public ticketToEvent; // tokenId => eventId
+    mapping(uint256 => uint256) internal ticketToEvent; // tokenId => eventId
     mapping(uint256 => bool) public checkedIn; // tokenId => bool
     mapping(uint256 => uint256) public checkInTimestamps; // tokenId => timestamp
     mapping(address => uint256[]) public ticketsByOwner; // owner => tokenIds
+    mapping(uint256 => bool) public isTicketCancelled; // tokenId => true nếu đã bị hủy
 
     event EventCreated(
         uint256 indexed eventId,
@@ -41,6 +51,10 @@ contract EventTicketNFT is ERC721, ReentrancyGuard {
         uint256 timestamp
     );
     event CheckInRemoved(uint256 indexed eventId, uint256 indexed ticketId);
+    event EventStatusUpdated(uint256 indexed eventId, uint8 newStatus);
+    event TicketCancelled(uint256 indexed eventId, uint256 indexed tokenId);
+    event TicketUncancelled(uint256 indexed eventId, uint256 indexed tokenId);
+
 
     constructor() ERC721("EventTicketNFT", "ETN") {}
 
@@ -60,10 +74,18 @@ contract EventTicketNFT is ERC721, ReentrancyGuard {
             ticketsSold: 0,
             eventTime: _eventTime,
             creator: msg.sender,
-            baseTokenURI: _baseTokenURI
+            baseTokenURI: _baseTokenURI,
+            status: 1
         });
 
         emit EventCreated(eventCounter, _eventName, _maxTickets);
+    }
+
+    function updateEventStatus(uint256 _eventId, uint8 _newStatus) external {
+        require(events[_eventId].creator == msg.sender, "Not event creator");
+        require(_newStatus == 0 || _newStatus == 1, "Invalid status");
+        events[_eventId].status = _newStatus;
+        emit EventStatusUpdated(_eventId, _newStatus);
     }
 
     function updateBaseTokenURI(
@@ -111,9 +133,6 @@ contract EventTicketNFT is ERC721, ReentrancyGuard {
         emit EventCreated(_eventId, _newEventName, _newMaxTickets);
     }
 
-    // Thêm một mapping để theo dõi xem người dùng đã mint vé cho sự kiện này chưa
-    mapping(address => mapping(uint256 => bool)) public userHasTicketForEvent; // userHasTicketForEvent[address][eventId] = true/false
-
     function mintTicket(uint256 _eventId) external nonReentrant {
         Event storage eventDetails = events[_eventId];
         require(eventDetails.eventId != 0, "Event does not exist");
@@ -125,6 +144,7 @@ contract EventTicketNFT is ERC721, ReentrancyGuard {
             eventDetails.ticketsSold < eventDetails.maxTickets,
             "All tickets sold"
         );
+        require(eventDetails.status == 1, "Event is not active");
 
         // Không cần kiểm tra vé đã sở hữu trước đó nữa
 
@@ -139,8 +159,6 @@ contract EventTicketNFT is ERC721, ReentrancyGuard {
 
         emit TicketMinted(_eventId, tokenId, msg.sender);
     }
-
-    mapping(uint256 => string) public ticketToEventName; // tokenId => eventName
 
     function checkIn(uint256 _tokenId, uint256 _eventId) external {
         // Kiểm tra sự kiện của tokenId
@@ -160,6 +178,8 @@ contract EventTicketNFT is ERC721, ReentrancyGuard {
             block.timestamp <= events[_eventId].eventTime + 1 hours,
             "Event is over"
         );
+        require(!isTicketCancelled[_tokenId], "Ticket is cancelled");
+        require(events[_eventId].status == 1, "Event is not active");
 
         // Cập nhật trạng thái điểm danh
         checkedIn[_tokenId] = true;
@@ -179,7 +199,8 @@ contract EventTicketNFT is ERC721, ReentrancyGuard {
             address owner,
             bool checkedInStatus,
             uint256 timestamp,
-            string memory eventName
+            string memory eventName,
+            uint8 eventStatus
         )
     {
         // Kiểm tra vé có thuộc sự kiện không
@@ -194,6 +215,7 @@ contract EventTicketNFT is ERC721, ReentrancyGuard {
 
         // Lấy tên sự kiện tại thời điểm điểm danh
         eventName = events[eventId].eventName;
+        eventStatus = events[eventId].status;
     }
 
     function removeCheckIn(uint256 _eventId, uint256 _tokenId) external {
@@ -218,15 +240,28 @@ contract EventTicketNFT is ERC721, ReentrancyGuard {
     }
 
     // Lấy tất cả vé của người dùng
-    function getMyTickets() external view returns (uint256[] memory) {
-        return ticketsByOwner[msg.sender];
+    function getMyTickets() external view returns (MyTicketInfo[] memory) {
+        uint256[] memory userTickets = ticketsByOwner[msg.sender];
+        uint256 length = userTickets.length;
+        MyTicketInfo[] memory result = new MyTicketInfo[](length);
+
+        for (uint256 i = 0; i < length; i++) {
+            uint256 tokenId = userTickets[i];
+            uint256 eventId = ticketToEvent[tokenId];
+            bool isCheckedIn = checkedIn[tokenId];
+            uint256 time = checkInTimestamps[tokenId];
+
+            result[i] = MyTicketInfo(tokenId, eventId, isCheckedIn, time);
+        }
+
+        return result;
     }
 
     // (Bonus) Lấy vé theo sự kiện của người dùng cụ thể
-    function getEventTickets(
+    function getEventTicketsWithName(
         address user,
         uint256 eventId
-    ) external view returns (uint256[] memory) {
+    ) external view returns (uint256[] memory, string memory) {
         uint256[] memory allTickets = ticketsByOwner[user];
         uint256 count = 0;
 
@@ -240,11 +275,32 @@ contract EventTicketNFT is ERC721, ReentrancyGuard {
         uint256 j = 0;
 
         for (uint256 i = 0; i < allTickets.length; i++) {
-            if (ticketToEvent[allTickets[i]] == eventId) {
-                filtered[j++] = allTickets[i];
+            uint256 tokenId = allTickets[i];
+            if (ticketToEvent[tokenId] == eventId) {
+                filtered[j++] = tokenId;
             }
         }
 
-        return filtered;
+        return (filtered, events[eventId].eventName);
+    }
+
+    function cancelTicket(uint256 eventId, uint256 tokenId) external {
+        require(ticketToEvent[tokenId] == eventId, "Token not for this event");
+        require(events[eventId].creator == msg.sender, "Not event creator");
+        require(!isTicketCancelled[tokenId], "Ticket already cancelled");
+
+        isTicketCancelled[tokenId] = true;
+
+        emit TicketCancelled(eventId, tokenId);
+    }
+
+   function unCancelTicket(uint256 eventId, uint256 tokenId) external {
+        require(ticketToEvent[tokenId] == eventId, "Token not for this event");
+        require(events[eventId].creator == msg.sender, "Not event creator");
+        require(isTicketCancelled[tokenId], "Ticket is not cancelled");
+
+        isTicketCancelled[tokenId] = false;
+
+        emit TicketUncancelled(eventId, tokenId); // Sửa lại sự kiện
     }
 }
