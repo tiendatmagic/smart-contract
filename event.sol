@@ -257,21 +257,17 @@ contract EventTicketNFT is ERC721, ReentrancyGuard, Ownable {
                 msg.value >= eventDetails.ticketPrice,
                 "Insufficient payment"
             );
-            require(
-                address(msg.sender).balance >= eventDetails.ticketPrice,
-                "Insufficient balance"
-            );
 
             // Calculate distribution based on contractPercentage
             uint256 contractAmount = (eventDetails.ticketPrice *
                 contractPercentage) / 100;
             uint256 creatorAmount = eventDetails.ticketPrice - contractAmount;
 
-            // Transfer creator's share
+            // Transfer creator's share - must succeed
             (bool success, ) = payable(eventDetails.creator).call{
                 value: creatorAmount
             }("");
-            require(success, "Creator payment failed");
+            require(success, "Transfer to creator failed");
 
             // Emit payment distribution event
             emit PaymentDistributed(
@@ -288,6 +284,9 @@ contract EventTicketNFT is ERC721, ReentrancyGuard, Ownable {
                 }("");
                 require(refundSuccess, "Refund failed");
             }
+        } else {
+            // Ensure no payment is sent for free events
+            require(msg.value == 0, "No payment required for free event");
         }
 
         ticketIdCounter++;
