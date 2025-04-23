@@ -49,7 +49,8 @@ contract EventTicketNFT is ERC721, ReentrancyGuard, Ownable {
         uint256 maxTickets;
         uint256 eventTime;
         string baseTokenURI;
-        string eventData; // Thay metadataUrl thành eventData
+        string eventData;
+        uint256 ticketPrice;
     }
 
     struct Event {
@@ -61,7 +62,8 @@ contract EventTicketNFT is ERC721, ReentrancyGuard, Ownable {
         address creator;
         string baseTokenURI;
         uint8 status;
-        string eventData; // Thay metadataUrl thành eventData
+        string eventData;
+        uint256 ticketPrice;
     }
 
     struct MyTicketInfo {
@@ -88,6 +90,7 @@ contract EventTicketNFT is ERC721, ReentrancyGuard, Ownable {
 
     uint256 public eventCounter;
     uint256 public ticketIdCounter;
+    uint256 public contractPercentage = 0;
 
     mapping(uint256 => Event) public events;
     mapping(uint256 => uint256) internal ticketToEvent;
@@ -101,7 +104,8 @@ contract EventTicketNFT is ERC721, ReentrancyGuard, Ownable {
         uint256 indexed eventId,
         string eventName,
         uint256 maxTickets,
-        string eventData // Thay metadataUrl thành eventData
+        string eventData,
+        uint256 ticketPrice
     );
     event TicketMinted(
         uint256 indexed eventId,
@@ -122,10 +126,28 @@ contract EventTicketNFT is ERC721, ReentrancyGuard, Ownable {
     event EventStatusUpdated(uint256 indexed eventId, uint8 newStatus);
     event TicketCancelled(uint256 indexed eventId, uint256 indexed tokenId);
     event TicketUncancelled(uint256 indexed eventId, uint256 indexed tokenId);
+    event PaymentDistributed(
+        uint256 indexed eventId,
+        address indexed creator,
+        uint256 creatorAmount,
+        uint256 contractAmount
+    );
+    event ContractPercentageUpdated(
+        uint256 oldPercentage,
+        uint256 newPercentage
+    );
 
     constructor() ERC721("EventTicketNFT", "ETN") Ownable(msg.sender) {}
 
     receive() external payable {}
+
+    function setContractPercentage(uint256 newPercentage) external onlyOwner {
+        require(newPercentage <= 100, "Percentage must be 0-100");
+        require(newPercentage != contractPercentage, "Percentage unchanged");
+        uint256 oldPercentage = contractPercentage;
+        contractPercentage = newPercentage;
+        emit ContractPercentageUpdated(oldPercentage, newPercentage);
+    }
 
     function createEvent(EventInput memory input) external {
         require(input.maxTickets > 0, "Max tickets must be greater than 0");
@@ -142,13 +164,15 @@ contract EventTicketNFT is ERC721, ReentrancyGuard, Ownable {
             msg.sender,
             input.baseTokenURI,
             1,
-            input.eventData
+            input.eventData,
+            input.ticketPrice
         );
         emit EventCreated(
             eventCounter,
             input.eventName,
             input.maxTickets,
-            input.eventData
+            input.eventData,
+            input.ticketPrice
         );
     }
 
@@ -199,15 +223,19 @@ contract EventTicketNFT is ERC721, ReentrancyGuard, Ownable {
         eventDetails.eventTime = input.eventTime;
         eventDetails.baseTokenURI = input.baseTokenURI;
         eventDetails.eventData = input.eventData;
+        eventDetails.ticketPrice = input.ticketPrice;
         emit EventCreated(
             eventId,
             input.eventName,
             input.maxTickets,
-            input.eventData
+            input.eventData,
+            input.ticketPrice
         );
     }
 
-    function mintTicket(TicketInput memory input) external nonReentrant {
+    function mintTicket(
+        TicketInput memory input
+    ) external payable nonReentrant {
         Event storage eventDetails = events[input.eventId];
         require(eventDetails.eventId != 0, "Event does not exist");
         require(block.timestamp < eventDetails.eventTime, "Event has ended");
@@ -222,6 +250,45 @@ contract EventTicketNFT is ERC721, ReentrancyGuard, Ownable {
             bytes(input.phoneNumber).length > 0,
             "Phone number is required"
         );
+
+        // Check if ticket requires payment
+        if (eventDetails.ticketPrice > 0) {
+            require(
+                msg.value >= eventDetails.ticketPrice,
+                "Insufficient payment"
+            );
+            require(
+                address(msg.sender).balance >= eventDetails.ticketPrice,
+                "Insufficient balance"
+            );
+
+            // Calculate distribution based on contractPercentage
+            uint256 contractAmount = (eventDetails.ticketPrice *
+                contractPercentage) / 100;
+            uint256 creatorAmount = eventDetails.ticketPrice - contractAmount;
+
+            // Transfer creator's share
+            (bool success, ) = payable(eventDetails.creator).call{
+                value: creatorAmount
+            }("");
+            require(success, "Creator payment failed");
+
+            // Emit payment distribution event
+            emit PaymentDistributed(
+                input.eventId,
+                eventDetails.creator,
+                creatorAmount,
+                contractAmount
+            );
+
+            // Refund excess payment if any
+            if (msg.value > eventDetails.ticketPrice) {
+                (bool refundSuccess, ) = payable(msg.sender).call{
+                    value: msg.value - eventDetails.ticketPrice
+                }("");
+                require(refundSuccess, "Refund failed");
+            }
+        }
 
         ticketIdCounter++;
         uint256 tokenId = ticketIdCounter;
@@ -416,7 +483,8 @@ contract EventTicketNFT is ERC721, ReentrancyGuard, Ownable {
             address creator,
             string memory baseTokenURI,
             uint8 status,
-            string memory eventData
+            string memory eventData,
+            uint256 ticketPrice
         )
     {
         require(events[eventId].eventId != 0, "Event does not exist");
@@ -429,6 +497,7 @@ contract EventTicketNFT is ERC721, ReentrancyGuard, Ownable {
         baseTokenURI = events[eventId].baseTokenURI;
         status = events[eventId].status;
         eventData = events[eventId].eventData;
+        ticketPrice = events[eventId].ticketPrice;
     }
 
     function getEventCheckInStats(
@@ -483,7 +552,9 @@ contract EventTicketNFT is ERC721, ReentrancyGuard, Ownable {
                             ",",
                             uintToString(events[i].status),
                             ",",
-                            events[i].eventData
+                            events[i].eventData,
+                            ",",
+                            uintToString(events[i].ticketPrice)
                         )
                     );
                     count++;
@@ -532,7 +603,9 @@ contract EventTicketNFT is ERC721, ReentrancyGuard, Ownable {
                             ",",
                             uintToString(events[i].status),
                             ",",
-                            events[i].eventData
+                            events[i].eventData,
+                            ",",
+                            uintToString(events[i].ticketPrice)
                         )
                     );
                     count++;
