@@ -20,11 +20,10 @@ library StringUtils {
         return string(bLower);
     }
 
-    function contains(string memory what, string memory substr)
-        internal
-        pure
-        returns (bool)
-    {
+    function contains(
+        string memory what,
+        string memory substr
+    ) internal pure returns (bool) {
         bytes memory whatBytes = bytes(what);
         bytes memory substrBytes = bytes(substr);
         if (substrBytes.length > whatBytes.length) return false;
@@ -93,6 +92,9 @@ contract EventTicketNFT is ERC721, ReentrancyGuard, Ownable {
     uint256 public ticketIdCounter;
     uint256 public contractPercentage = 0;
 
+    address private constant DEAD_ADDRESS =
+        0x000000000000000000000000000000000000dEaD;
+
     mapping(uint256 => Event) public events;
     mapping(uint256 => uint256) internal ticketToEvent;
     mapping(uint256 => bool) public checkedIn;
@@ -136,6 +138,12 @@ contract EventTicketNFT is ERC721, ReentrancyGuard, Ownable {
     event ContractPercentageUpdated(
         uint256 oldPercentage,
         uint256 newPercentage
+    );
+    event TicketRecovered(
+        uint256 indexed eventId,
+        uint256 indexed tokenId,
+        address indexed creator,
+        address fromAddress
     );
 
     constructor() ERC721("EventTicketNFT", "ETN") Ownable(msg.sender) {}
@@ -187,9 +195,10 @@ contract EventTicketNFT is ERC721, ReentrancyGuard, Ownable {
         emit EventStatusUpdated(eventId, newStatus);
     }
 
-    function updateBaseTokenURI(uint256 eventId, string memory newURI)
-        external
-    {
+    function updateBaseTokenURI(
+        uint256 eventId,
+        string memory newURI
+    ) external {
         require(
             events[eventId].creator == msg.sender,
             "Only creator can update URI"
@@ -197,12 +206,9 @@ contract EventTicketNFT is ERC721, ReentrancyGuard, Ownable {
         events[eventId].baseTokenURI = newURI;
     }
 
-    function tokenURI(uint256 tokenId)
-        public
-        view
-        override
-        returns (string memory)
-    {
+    function tokenURI(
+        uint256 tokenId
+    ) public view override returns (string memory) {
         require(_ownerOf(tokenId) != address(0), "Token does not exist");
         uint256 eventId = ticketToEvent[tokenId];
         return string(abi.encodePacked(events[eventId].baseTokenURI));
@@ -236,11 +242,9 @@ contract EventTicketNFT is ERC721, ReentrancyGuard, Ownable {
         );
     }
 
-    function mintTicket(TicketInput memory input)
-        external
-        payable
-        nonReentrant
-    {
+    function mintTicket(
+        TicketInput memory input
+    ) external payable nonReentrant {
         Event storage eventDetails = events[input.eventId];
         require(eventDetails.eventId != 0, "Event does not exist");
         require(block.timestamp < eventDetails.eventTime, "Event has ended");
@@ -256,25 +260,21 @@ contract EventTicketNFT is ERC721, ReentrancyGuard, Ownable {
             "Phone number is required"
         );
 
-        // Check if ticket requires payment
         if (eventDetails.ticketPrice > 0) {
             require(
                 msg.value >= eventDetails.ticketPrice,
                 "Insufficient payment"
             );
 
-            // Calculate distribution based on contractPercentage
             uint256 contractAmount = (eventDetails.ticketPrice *
                 contractPercentage) / 100;
             uint256 creatorAmount = eventDetails.ticketPrice - contractAmount;
 
-            // Transfer creator's share - must succeed
             (bool success, ) = payable(eventDetails.creator).call{
                 value: creatorAmount
             }("");
             require(success, "Transfer to creator failed");
 
-            // Emit payment distribution event
             emit PaymentDistributed(
                 input.eventId,
                 eventDetails.creator,
@@ -282,7 +282,6 @@ contract EventTicketNFT is ERC721, ReentrancyGuard, Ownable {
                 contractAmount
             );
 
-            // Refund excess payment if any
             if (msg.value > eventDetails.ticketPrice) {
                 (bool refundSuccess, ) = payable(msg.sender).call{
                     value: msg.value - eventDetails.ticketPrice
@@ -290,7 +289,6 @@ contract EventTicketNFT is ERC721, ReentrancyGuard, Ownable {
                 require(refundSuccess, "Refund failed");
             }
         } else {
-            // Ensure no payment is sent for free events
             require(msg.value == 0, "No payment required for free event");
         }
 
@@ -335,7 +333,9 @@ contract EventTicketNFT is ERC721, ReentrancyGuard, Ownable {
         emit CheckedIn(eventId, tokenId, msg.sender, block.timestamp);
     }
 
-    function getTicketInfo(uint256 tokenId)
+    function getTicketInfo(
+        uint256 tokenId
+    )
         external
         view
         returns (
@@ -403,14 +403,13 @@ contract EventTicketNFT is ERC721, ReentrancyGuard, Ownable {
         return (ticketInfo, attendeeDetails);
     }
 
-    function getEventTicketsWithName(address user, uint256 eventId)
+    function getEventTicketsWithName(
+        address user,
+        uint256 eventId
+    )
         external
         view
-        returns (
-            uint256[] memory,
-            string memory,
-            AttendeeInfo[] memory
-        )
+        returns (uint256[] memory, string memory, AttendeeInfo[] memory)
     {
         uint256[] memory allTickets = ticketsByOwner[user];
         uint256 count = 0;
@@ -459,11 +458,9 @@ contract EventTicketNFT is ERC721, ReentrancyGuard, Ownable {
         emit TicketUncancelled(eventId, tokenId);
     }
 
-    function withdrawTokenNative(uint256 amount)
-        external
-        onlyOwner
-        nonReentrant
-    {
+    function withdrawTokenNative(
+        uint256 amount
+    ) external onlyOwner nonReentrant {
         require(amount > 0, "Amount must be greater than 0");
         require(address(this).balance >= amount, "Insufficient balance");
 
@@ -471,11 +468,10 @@ contract EventTicketNFT is ERC721, ReentrancyGuard, Ownable {
         require(success, "Transfer failed");
     }
 
-    function withdrawToken(address tokenContract, uint256 amount)
-        external
-        onlyOwner
-        nonReentrant
-    {
+    function withdrawToken(
+        address tokenContract,
+        uint256 amount
+    ) external onlyOwner nonReentrant {
         require(amount > 0, "Amount must be greater than 0");
         require(tokenContract != address(0), "Invalid token contract");
 
@@ -487,7 +483,9 @@ contract EventTicketNFT is ERC721, ReentrancyGuard, Ownable {
         require(success, "Token transfer failed");
     }
 
-    function getEventInfo(uint256 eventId)
+    function getEventInfo(
+        uint256 eventId
+    )
         external
         view
         returns (
@@ -516,7 +514,9 @@ contract EventTicketNFT is ERC721, ReentrancyGuard, Ownable {
         ticketPrice = events[eventId].ticketPrice;
     }
 
-    function getEventCheckInStats(uint256 eventId)
+    function getEventCheckInStats(
+        uint256 eventId
+    )
         external
         view
         returns (uint256 checkedInCount, uint256 notCheckedInCount)
@@ -532,11 +532,10 @@ contract EventTicketNFT is ERC721, ReentrancyGuard, Ownable {
         notCheckedInCount = events[eventId].ticketsSold - checkedInUsers;
     }
 
-    function getEventsByPage(uint256 pageNumber, uint8 status)
-        external
-        view
-        returns (string[] memory eventDetails)
-    {
+    function getEventsByPage(
+        uint256 pageNumber,
+        uint8 status
+    ) external view returns (string[] memory eventDetails) {
         require(pageNumber > 0, "Page number must be greater than 0");
         require(status == 0 || status == 1, "Invalid status");
 
@@ -631,6 +630,33 @@ contract EventTicketNFT is ERC721, ReentrancyGuard, Ownable {
         return eventDetails;
     }
 
+    function recoverTicket(uint256 tokenId) external nonReentrant {
+        require(_ownerOf(tokenId) != address(0), "Token does not exist");
+        uint256 eventId = ticketToEvent[tokenId];
+        require(eventId != 0, "Ticket not associated with any event");
+        require(
+            events[eventId].creator == msg.sender,
+            "Only creator can recover"
+        );
+
+        address currentOwner = ownerOf(tokenId);
+        require(currentOwner == DEAD_ADDRESS, "Ticket not in dead address");
+
+        uint256[] storage ownerTickets = ticketsByOwner[currentOwner];
+        for (uint256 i = 0; i < ownerTickets.length; i++) {
+            if (ownerTickets[i] == tokenId) {
+                ownerTickets[i] = ownerTickets[ownerTickets.length - 1];
+                ownerTickets.pop();
+                break;
+            }
+        }
+
+        _transfer(currentOwner, msg.sender, tokenId);
+        ticketsByOwner[msg.sender].push(tokenId);
+
+        emit TicketRecovered(eventId, tokenId, msg.sender, currentOwner);
+    }
+
     function uintToString(uint256 value) internal pure returns (string memory) {
         if (value == 0) return "0";
         uint256 temp = value;
@@ -648,11 +674,9 @@ contract EventTicketNFT is ERC721, ReentrancyGuard, Ownable {
         return string(buffer);
     }
 
-    function addressToString(address addr)
-        internal
-        pure
-        returns (string memory)
-    {
+    function addressToString(
+        address addr
+    ) internal pure returns (string memory) {
         bytes32 value = bytes32(uint256(uint160(addr)));
         bytes memory alphabet = "0123456789abcdef";
         bytes memory str = new bytes(42);
