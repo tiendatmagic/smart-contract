@@ -162,7 +162,7 @@ contract EventTicketNFT is ERC721, ReentrancyGuard, Ownable {
         require(bytes(input.eventName).length > 0, "Name required");
         require(bytes(input.eventData).length > 0, "Data required");
         require(
-            input.categoryId >= 1 && input.categoryId <= 20,
+            input.categoryId >= 1 && input.categoryId <= 15,
             "Invalid category"
         );
         require(input.timeRange[1] >= input.timeRange[0], "Invalid time range");
@@ -224,7 +224,7 @@ contract EventTicketNFT is ERC721, ReentrancyGuard, Ownable {
         require(bytes(input.eventName).length > 0, "Name required");
         require(bytes(input.eventData).length > 0, "Data required");
         require(
-            input.categoryId >= 1 && input.categoryId <= 20,
+            input.categoryId >= 1 && input.categoryId <= 15,
             "Invalid category"
         );
         require(input.timeRange[1] >= input.timeRange[0], "Invalid time range");
@@ -699,6 +699,26 @@ contract EventTicketNFT is ERC721, ReentrancyGuard, Ownable {
             if (i == 1) break;
         }
         return ticketDetails;
+    }
+
+    function getTotalEventsByAllCategories()
+        external
+        view
+        returns (uint256[15] memory)
+    {
+        uint256[15] memory totals;
+        for (uint256 categoryId = 1; categoryId <= 15; categoryId++) {
+            uint256 total = 0;
+            for (uint256 i = 1; i <= eventCounter; i++) {
+                if (
+                    events[i].eventId != 0 && events[i].categoryId == categoryId
+                ) {
+                    total++;
+                }
+            }
+            totals[categoryId - 1] = total;
+        }
+        return totals;
     }
 
     function _uintToString(uint256 value) private pure returns (string memory) {
