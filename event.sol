@@ -161,7 +161,10 @@ contract EventTicketNFT is ERC721, ReentrancyGuard, Ownable {
         require(input.maxTickets > 0, "Invalid ticket count");
         require(bytes(input.eventName).length > 0, "Name required");
         require(bytes(input.eventData).length > 0, "Data required");
-        require(input.categoryId > 0, "Invalid category");
+        require(
+            input.categoryId >= 1 && input.categoryId <= 20,
+            "Invalid category"
+        );
         require(input.timeRange[1] >= input.timeRange[0], "Invalid time range");
 
         eventCounter++;
@@ -220,7 +223,10 @@ contract EventTicketNFT is ERC721, ReentrancyGuard, Ownable {
         require(input.maxTickets >= e.ticketsSold, "Invalid ticket count");
         require(bytes(input.eventName).length > 0, "Name required");
         require(bytes(input.eventData).length > 0, "Data required");
-        require(input.categoryId > 0, "Invalid category");
+        require(
+            input.categoryId >= 1 && input.categoryId <= 20,
+            "Invalid category"
+        );
         require(input.timeRange[1] >= input.timeRange[0], "Invalid time range");
 
         e.eventName = input.eventName;
