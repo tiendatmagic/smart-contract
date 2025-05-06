@@ -6,132 +6,131 @@ import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
-library StringUtils {
-    function toLower(string memory str) internal pure returns (string memory) {
-        bytes memory bStr = bytes(str);
-        for (uint256 i = 0; i < bStr.length; i++) {
-            uint8 char = uint8(bStr[i]);
-            if (char >= 65 && char <= 90) {
-                bStr[i] = bytes1(char + 32);
+library StrUtil {
+    function toLower(string memory s) internal pure returns (string memory) {
+        bytes memory b = bytes(s);
+        for (uint i = 0; i < b.length; i++) {
+            uint8 c = uint8(b[i]);
+            if (c >= 65 && c <= 90) {
+                b[i] = bytes1(c + 32);
             }
         }
-        return string(bStr);
+        return string(b);
     }
 
     function contains(
-        string memory what,
-        string memory substr
+        string memory w,
+        string memory sub
     ) internal pure returns (bool) {
-        bytes memory whatBytes = bytes(what);
-        bytes memory substrBytes = bytes(substr);
-        if (substrBytes.length > whatBytes.length) return false;
+        bytes memory wb = bytes(w);
+        bytes memory sb = bytes(sub);
+        if (sb.length > wb.length) return false;
 
-        for (uint256 i = 0; i <= whatBytes.length - substrBytes.length; i++) {
-            bool found = true;
-            for (uint256 j = 0; j < substrBytes.length; j++) {
-                if (whatBytes[i + j] != substrBytes[j]) {
-                    found = false;
+        for (uint i = 0; i <= wb.length - sb.length; i++) {
+            bool f = true;
+            for (uint j = 0; j < sb.length; j++) {
+                if (wb[i + j] != sb[j]) {
+                    f = false;
                     break;
                 }
             }
-            if (found) return true;
+            if (f) return true;
         }
         return false;
     }
 }
 
 contract EventTicketNFT is ERC721, ReentrancyGuard, Ownable {
-    using StringUtils for string;
+    using StrUtil for string;
 
-    struct EventInput {
+    struct EvInp {
         string name;
-        uint256 maxTix;
-        uint256[2] timeRange;
-        string baseURI;
+        uint maxTix;
+        uint[2] time;
+        string tokenURI;
         string data;
-        uint256 price;
-        uint256 catId;
+        uint price;
+        uint catId;
     }
 
-    struct Event {
-        uint256 id;
+    struct Ev {
+        uint id;
         string name;
-        uint256 maxTix;
-        uint256 sold;
-        uint256 start;
-        uint256 end;
+        uint maxTix;
+        uint sold;
+        uint start;
+        uint end;
         address creator;
-        string baseURI;
+        string tokenURI;
         uint8 status;
         string data;
-        uint256 price;
-        uint256 catId;
+        uint price;
+        uint catId;
+    }
+
+    struct TixInfo {
+        uint tixId;
+        uint evId;
+        bool checked;
+        uint checkTime;
+    }
+
+    struct AttInfo {
+        string name;
+        bool gender;
+        string email;
+        string phone;
+    }
+
+    struct TixInp {
+        uint evId;
+        string name;
+        bool gender;
+        string email;
+        string phone;
     }
 
     struct EventInfo {
-        uint256 id;
+        uint id;
         string name;
-        uint256 maxTix;
-        uint256 sold;
-        uint256 start;
-        uint256 end;
+        uint maxTix;
+        uint sold;
+        uint start;
+        uint end;
         address creator;
-        string baseURI;
+        string tokenURI;
         uint8 status;
         string data;
-        uint256 price;
-        uint256 catId;
-        uint256 checked;
-        uint256 notChecked;
+        uint price;
+        uint catId;
+        uint checked;
+        uint notChecked;
     }
 
-    struct MyTicketInfo {
-        uint256 tokenId;
-        uint256 eventId;
-        bool checked;
-        uint256 checkTime;
-    }
+    uint public evCount;
+    uint public tixCount;
+    uint public feePct;
 
-    struct AttendeeInfo {
-        string name;
-        bool gender;
-        string email;
-        string phone;
-    }
+    address private constant DEAD = 0x000000000000000000000000000000000000dEaD;
 
-    struct TicketInput {
-        uint256 eventId;
-        string name;
-        bool gender;
-        string email;
-        string phone;
-    }
-
-    uint256 public eventCount;
-    uint256 public ticketIdCount;
-    uint256 public feePercent;
-
-    address private constant DEAD_ADDRESS =
-        0x000000000000000000000000000000000000dEaD;
-
-    mapping(uint256 => Event) public events;
-    mapping(uint256 => uint256) private _ticketEvent;
-    mapping(uint256 => uint256) private _checkTimes;
-    mapping(address => uint256[]) private _ownerTickets;
-    mapping(uint256 => bool) public isCancelled;
-    mapping(uint256 => AttendeeInfo) public attendees;
+    mapping(uint => Ev) public evs;
+    mapping(uint => uint) private tixToEv;
+    mapping(uint => uint) private checkTimes;
+    mapping(address => uint[]) private tixByOwn;
+    mapping(uint => bool) public tixCancel;
+    mapping(uint => AttInfo) public attInfo;
 
     event EventCreated(
-        uint256 indexed id,
+        uint indexed evId,
         string name,
-        uint256 maxTix,
+        uint maxTix,
         string data,
-        uint256 price,
-        uint256 catId
+        uint price,
+        uint catId
     );
     event TicketMinted(
-        uint256 indexed eventId,
-        uint256 indexed ticketId,
+        uint indexed evId,
+        uint indexed tixId,
         address indexed owner,
         string name,
         bool gender,
@@ -139,120 +138,116 @@ contract EventTicketNFT is ERC721, ReentrancyGuard, Ownable {
         string phone
     );
     event CheckedIn(
-        uint256 indexed eventId,
-        uint256 indexed ticketId,
-        address indexed attendee,
-        uint256 timestamp
+        uint indexed evId,
+        uint indexed tixId,
+        address indexed att,
+        uint time
     );
-    event CheckInRemoved(uint256 indexed eventId, uint256 indexed ticketId);
-    event EventStatusUpdated(uint256 indexed id, uint8 status);
-    event TicketCancelled(uint256 indexed eventId, uint256 indexed tokenId);
-    event TicketUncancelled(uint256 indexed eventId, uint256 indexed tokenId);
+    event CheckInRemoved(uint indexed evId, uint indexed tixId);
+    event EventStatusUpdated(uint indexed evId, uint8 status);
+    event TicketCancelled(uint indexed evId, uint indexed tixId);
+    event TicketUncancelled(uint indexed evId, uint indexed tixId);
     event PaymentDistributed(
-        uint256 indexed eventId,
+        uint indexed evId,
         address indexed creator,
-        uint256 creatorAmt,
-        uint256 contractAmt
+        uint creatorAmt,
+        uint feeAmt
     );
-    event FeePercentUpdated(uint256 oldPercent, uint256 newPercent);
+    event ContractPercentageUpdated(uint oldPct, uint newPct);
     event TicketRecovered(
-        uint256 indexed eventId,
-        uint256 indexed tokenId,
+        uint indexed evId,
+        uint indexed tixId,
         address indexed creator,
         address from
     );
 
     constructor() ERC721("EventTicketNFT", "ETN") Ownable(msg.sender) {}
 
-    function setFeePercent(uint256 newPercent) external onlyOwner {
-        require(newPercent <= 100, "Invalid percent");
-        require(newPercent != feePercent, "No change");
-        emit FeePercentUpdated(feePercent, newPercent);
-        feePercent = newPercent;
+    function setContractPercentage(uint newPct) external onlyOwner {
+        require(newPct <= 100, "Invalid percentage");
+        require(newPct != feePct, "No change");
+        emit ContractPercentageUpdated(feePct, newPct);
+        feePct = newPct;
     }
 
-    function createEvent(EventInput memory input) external {
-        require(input.maxTix > 0, "Invalid ticket count");
-        require(bytes(input.name).length > 0, "Name required");
-        require(bytes(input.data).length > 0, "Data required");
-        require(input.catId >= 1 && input.catId <= 15, "Invalid category");
-        require(input.timeRange[1] >= input.timeRange[0], "Invalid time range");
+    function createEvent(EvInp memory inp) external {
+        require(inp.maxTix > 0, "Invalid ticket count");
+        require(bytes(inp.name).length > 0, "Name required");
+        require(bytes(inp.data).length > 0, "Data required");
+        require(inp.catId >= 1 && inp.catId <= 15, "Invalid category");
+        require(inp.time[1] >= inp.time[0], "Invalid time range");
 
-        eventCount++;
-        events[eventCount] = Event(
-            eventCount,
-            input.name,
-            input.maxTix,
+        evCount++;
+        evs[evCount] = Ev(
+            evCount,
+            inp.name,
+            inp.maxTix,
             0,
-            input.timeRange[0],
-            input.timeRange[1],
+            inp.time[0],
+            inp.time[1],
             msg.sender,
-            input.baseURI,
+            inp.tokenURI,
             1,
-            input.data,
-            input.price,
-            input.catId
+            inp.data,
+            inp.price,
+            inp.catId
         );
         emit EventCreated(
-            eventCount,
-            input.name,
-            input.maxTix,
-            input.data,
-            input.price,
-            input.catId
+            evCount,
+            inp.name,
+            inp.maxTix,
+            inp.data,
+            inp.price,
+            inp.catId
         );
     }
 
-    function updateEventStatus(uint256 id, uint8 status) external {
-        require(events[id].creator == msg.sender, "Not creator");
+    function updateEventStatus(uint evId, uint8 status) external {
+        require(evs[evId].creator == msg.sender, "Not creator");
         require(status <= 1, "Invalid status");
-        events[id].status = status;
-        emit EventStatusUpdated(id, status);
+        evs[evId].status = status;
+        emit EventStatusUpdated(evId, status);
     }
 
-    function updateBaseURI(uint256 id, string memory newURI) external {
-        require(events[id].creator == msg.sender, "Not creator");
-        events[id].baseURI = newURI;
+    function updateBaseTokenURI(uint evId, string memory newURI) external {
+        require(evs[evId].creator == msg.sender, "Not creator");
+        evs[evId].tokenURI = newURI;
     }
 
-    function tokenURI(
-        uint256 tokenId
-    ) public view override returns (string memory) {
-        require(_ownerOf(tokenId) != address(0), "Nonexistent token");
-        return string(abi.encodePacked(events[_ticketEvent[tokenId]].baseURI));
+    function tokenURI(uint tixId) public view override returns (string memory) {
+        require(_ownerOf(tixId) != address(0), "Nonexistent token");
+        return string(abi.encodePacked(evs[tixToEv[tixId]].tokenURI));
     }
 
-    function updateEvent(EventInput memory input, uint256 id) external {
-        Event storage e = events[id];
+    function updateEvent(EvInp memory inp, uint evId) external {
+        Ev storage e = evs[evId];
         require(msg.sender == e.creator, "Not creator");
-        require(input.maxTix >= e.sold, "Invalid ticket count");
-        require(bytes(input.name).length > 0, "Name required");
-        require(bytes(input.data).length > 0, "Data required");
-        require(input.catId >= 1 && input.catId <= 15, "Invalid category");
-        require(input.timeRange[1] >= input.timeRange[0], "Invalid time range");
+        require(inp.maxTix >= e.sold, "Invalid ticket count");
+        require(bytes(inp.name).length > 0, "Name required");
+        require(bytes(inp.data).length > 0, "Data required");
+        require(inp.catId >= 1 && inp.catId <= 15, "Invalid category");
+        require(inp.time[1] >= inp.time[0], "Invalid time range");
 
-        e.name = input.name;
-        e.maxTix = input.maxTix;
-        e.start = input.timeRange[0];
-        e.end = input.timeRange[1];
-        e.baseURI = input.baseURI;
-        e.data = input.data;
-        e.price = input.price;
-        e.catId = input.catId;
+        e.name = inp.name;
+        e.maxTix = inp.maxTix;
+        e.start = inp.time[0];
+        e.end = inp.time[1];
+        e.tokenURI = inp.tokenURI;
+        e.data = inp.data;
+        e.price = inp.price;
+        e.catId = inp.catId;
         emit EventCreated(
-            id,
-            input.name,
-            input.maxTix,
-            input.data,
-            input.price,
-            input.catId
+            evId,
+            inp.name,
+            inp.maxTix,
+            inp.data,
+            inp.price,
+            inp.catId
         );
     }
 
-    function mintTicket(
-        TicketInput memory input
-    ) external payable nonReentrant {
-        Event storage e = events[input.eventId];
+    function mintTicket(TixInp memory inp) external payable nonReentrant {
+        Ev storage e = evs[inp.evId];
         require(e.id != 0, "Nonexistent event");
         require(
             block.timestamp >= e.start && block.timestamp <= e.end,
@@ -260,469 +255,438 @@ contract EventTicketNFT is ERC721, ReentrancyGuard, Ownable {
         );
         require(e.sold < e.maxTix, "Sold out");
         require(e.status == 1, "Event not active");
-        require(bytes(input.name).length > 0, "Name required");
-        require(bytes(input.email).length > 0, "Email required");
-        require(bytes(input.phone).length > 0, "Phone required");
+        require(bytes(inp.name).length > 0, "Name required");
+        require(bytes(inp.email).length > 0, "Email required");
+        require(bytes(inp.phone).length > 0, "Phone required");
 
-        uint256[] storage userTix = _ownerTickets[msg.sender];
-        for (uint256 i = 0; i < userTix.length; i++) {
-            uint256 tId = userTix[i];
-            if (_ticketEvent[tId] == input.eventId && !isCancelled[tId]) {
+        uint[] storage usrTix = tixByOwn[msg.sender];
+        for (uint i = 0; i < usrTix.length; i++) {
+            uint existingTixId = usrTix[i];
+            if (
+                tixToEv[existingTixId] == inp.evId && !tixCancel[existingTixId]
+            ) {
                 revert("Already owns ticket");
             }
         }
 
         if (e.price > 0) {
             require(msg.value >= e.price, "Insufficient payment");
-            uint256 contractAmt = (e.price * feePercent) / 100;
-            uint256 creatorAmt = e.price - contractAmt;
+            uint feeAmt = (e.price * feePct) / 100;
+            uint creatorAmt = e.price - feeAmt;
 
-            (bool success, ) = e.creator.call{value: creatorAmt}("");
-            require(success, "Payment failed");
+            (bool ok, ) = e.creator.call{value: creatorAmt}("");
+            require(ok, "Payment failed");
 
-            emit PaymentDistributed(
-                input.eventId,
-                e.creator,
-                creatorAmt,
-                contractAmt
-            );
+            emit PaymentDistributed(inp.evId, e.creator, creatorAmt, feeAmt);
 
             if (msg.value > e.price) {
                 payable(msg.sender).transfer(msg.value - e.price);
             }
         }
 
-        uint256 tokenId = ++ticketIdCount;
-        _safeMint(msg.sender, tokenId);
-        _ticketEvent[tokenId] = input.eventId;
-        userTix.push(tokenId);
+        uint tixId = ++tixCount;
+        _safeMint(msg.sender, tixId);
+        tixToEv[tixId] = inp.evId;
+        usrTix.push(tixId);
         e.sold++;
-        attendees[tokenId] = AttendeeInfo(
-            input.name,
-            input.gender,
-            input.email,
-            input.phone
-        );
+        attInfo[tixId] = AttInfo(inp.name, inp.gender, inp.email, inp.phone);
         emit TicketMinted(
-            input.eventId,
-            tokenId,
+            inp.evId,
+            tixId,
             msg.sender,
-            input.name,
-            input.gender,
-            input.email,
-            input.phone
+            inp.name,
+            inp.gender,
+            inp.email,
+            inp.phone
         );
     }
 
-    function checkIn(uint256 tokenId) external {
-        require(_ownerOf(tokenId) != address(0), "Nonexistent token");
-        uint256 eventId = _ticketEvent[tokenId];
-        require(ownerOf(tokenId) == msg.sender, "Not owner");
-        require(_checkTimes[tokenId] == 0, "Already checked in");
-        require(!isCancelled[tokenId], "Ticket cancelled");
-        require(events[eventId].status == 1, "Event not active");
+    function checkIn(uint tixId) external {
+        require(_ownerOf(tixId) != address(0), "Nonexistent token");
+        uint evId = tixToEv[tixId];
+        require(ownerOf(tixId) == msg.sender, "Not owner");
+        require(checkTimes[tixId] == 0, "Already checked in");
+        require(!tixCancel[tixId], "Ticket cancelled");
+        require(evs[evId].status == 1, "Event not active");
         require(
-            block.timestamp >= events[eventId].start &&
-                block.timestamp <= events[eventId].end + 1 hours,
+            block.timestamp >= evs[evId].start &&
+                block.timestamp <= evs[evId].end + 1 hours,
             "Check-in closed"
         );
 
-        _checkTimes[tokenId] = block.timestamp;
-        emit CheckedIn(eventId, tokenId, msg.sender, block.timestamp);
+        checkTimes[tixId] = block.timestamp;
+        emit CheckedIn(evId, tixId, msg.sender, block.timestamp);
     }
 
     function getTicketInfo(
-        uint256 tokenId
+        uint tixId
     )
         external
         view
         returns (
-            uint256 eventId,
-            address owner,
+            uint evId,
+            address own,
             bool checked,
-            uint256 timestamp,
+            uint time,
             string memory name,
             uint8 status,
-            AttendeeInfo memory attendee,
+            AttInfo memory att,
             bool cancelled
         )
     {
-        require(_ownerOf(tokenId) != address(0), "Nonexistent token");
-        eventId = _ticketEvent[tokenId];
-        Event storage e = events[eventId];
-        owner = ownerOf(tokenId);
-        checked = _checkTimes[tokenId] > 0;
-        timestamp = _checkTimes[tokenId];
+        require(_ownerOf(tixId) != address(0), "Nonexistent token");
+        evId = tixToEv[tixId];
+        Ev storage e = evs[evId];
+        own = ownerOf(tixId);
+        checked = checkTimes[tixId] > 0;
+        time = checkTimes[tixId];
         name = e.name;
         status = e.status;
-        attendee = attendees[tokenId];
-        cancelled = isCancelled[tokenId];
+        att = attInfo[tixId];
+        cancelled = tixCancel[tixId];
     }
 
-    function removeCheckIn(uint256 tokenId) external {
-        require(_ownerOf(tokenId) != address(0), "Nonexistent token");
-        uint256 eventId = _ticketEvent[tokenId];
+    function removeCheckIn(uint tixId) external {
+        require(_ownerOf(tixId) != address(0), "Nonexistent token");
+        uint evId = tixToEv[tixId];
         require(
-            events[eventId].creator == msg.sender ||
-                ownerOf(tokenId) == msg.sender,
+            evs[evId].creator == msg.sender || ownerOf(tixId) == msg.sender,
             "Not authorized"
         );
-        require(_checkTimes[tokenId] > 0, "Not checked in");
+        require(checkTimes[tixId] > 0, "Not checked in");
 
-        _checkTimes[tokenId] = 0;
-        emit CheckInRemoved(eventId, tokenId);
+        checkTimes[tixId] = 0;
+        emit CheckInRemoved(evId, tixId);
     }
 
     function getMyTickets()
         external
         view
-        returns (MyTicketInfo[] memory, AttendeeInfo[] memory)
+        returns (TixInfo[] memory, AttInfo[] memory)
     {
-        uint256[] memory userTix = _ownerTickets[msg.sender];
-        MyTicketInfo[] memory tixInfo = new MyTicketInfo[](userTix.length);
-        AttendeeInfo[] memory attendeeInfo = new AttendeeInfo[](userTix.length);
+        uint[] memory usrTix = tixByOwn[msg.sender];
+        TixInfo[] memory tixInf = new TixInfo[](usrTix.length);
+        AttInfo[] memory attDet = new AttInfo[](usrTix.length);
 
-        for (uint256 i = 0; i < userTix.length; i++) {
-            uint256 tokenId = userTix[i];
-            tixInfo[i] = MyTicketInfo(
-                tokenId,
-                _ticketEvent[tokenId],
-                _checkTimes[tokenId] > 0,
-                _checkTimes[tokenId]
+        for (uint i = 0; i < usrTix.length; i++) {
+            uint tixId = usrTix[i];
+            tixInf[i] = TixInfo(
+                tixId,
+                tixToEv[tixId],
+                checkTimes[tixId] > 0,
+                checkTimes[tixId]
             );
-            attendeeInfo[i] = attendees[tokenId];
+            attDet[i] = attInfo[tixId];
         }
-        return (tixInfo, attendeeInfo);
+        return (tixInf, attDet);
     }
 
     function getEventTicketsWithName(
-        address user,
-        uint256 eventId
-    )
-        external
-        view
-        returns (uint256[] memory, string memory, AttendeeInfo[] memory)
-    {
-        uint256[] memory allTix = _ownerTickets[user];
-        uint256 count;
-        for (uint256 i = 0; i < allTix.length; i++) {
-            if (_ticketEvent[allTix[i]] == eventId) count++;
+        address usr,
+        uint evId
+    ) external view returns (uint[] memory, string memory, AttInfo[] memory) {
+        uint[] memory allTix = tixByOwn[usr];
+        uint cnt;
+        for (uint i = 0; i < allTix.length; i++) {
+            if (tixToEv[allTix[i]] == evId) cnt++;
         }
 
-        uint256[] memory filtered = new uint256[](count);
-        AttendeeInfo[] memory attendeeInfo = new AttendeeInfo[](count);
-        uint256 j;
-        for (uint256 i = 0; i < allTix.length; i++) {
-            if (_ticketEvent[allTix[i]] == eventId) {
-                filtered[j] = allTix[i];
-                attendeeInfo[j] = attendees[allTix[i]];
+        uint[] memory filt = new uint[](cnt);
+        AttInfo[] memory atts = new AttInfo[](cnt);
+        uint j;
+        for (uint i = 0; i < allTix.length; i++) {
+            if (tixToEv[allTix[i]] == evId) {
+                filt[j] = allTix[i];
+                atts[j] = attInfo[allTix[i]];
                 j++;
             }
         }
-        return (filtered, events[eventId].name, attendeeInfo);
+        return (filt, evs[evId].name, atts);
     }
 
-    function cancelTicket(uint256 tokenId) external {
-        require(_ownerOf(tokenId) != address(0), "Nonexistent token");
-        uint256 eventId = _ticketEvent[tokenId];
-        require(events[eventId].creator == msg.sender, "Not creator");
-        require(!isCancelled[tokenId], "Already cancelled");
+    function cancelTicket(uint tixId) external {
+        require(_ownerOf(tixId) != address(0), "Nonexistent token");
+        uint evId = tixToEv[tixId];
+        require(evs[evId].creator == msg.sender, "Not creator");
+        require(!tixCancel[tixId], "Already cancelled");
 
-        isCancelled[tokenId] = true;
-        emit TicketCancelled(eventId, tokenId);
+        tixCancel[tixId] = true;
+        emit TicketCancelled(evId, tixId);
     }
 
-    function unCancelTicket(uint256 tokenId) external {
-        require(_ownerOf(tokenId) != address(0), "Nonexistent token");
-        uint256 eventId = _ticketEvent[tokenId];
-        require(events[eventId].creator == msg.sender, "Not creator");
-        require(isCancelled[tokenId], "Not cancelled");
+    function unCancelTicket(uint tixId) external {
+        require(_ownerOf(tixId) != address(0), "Nonexistent token");
+        uint evId = tixToEv[tixId];
+        require(evs[evId].creator == msg.sender, "Not creator");
+        require(tixCancel[tixId], "Not cancelled");
 
-        isCancelled[tokenId] = false;
-        emit TicketUncancelled(eventId, tokenId);
+        tixCancel[tixId] = false;
+        emit TicketUncancelled(evId, tixId);
     }
 
-    function withdrawTokenNative(
-        uint256 amount
-    ) external onlyOwner nonReentrant {
-        require(
-            amount > 0 && amount <= address(this).balance,
-            "Invalid amount"
-        );
-        payable(owner()).transfer(amount);
+    function withdrawTokenNative(uint amt) external onlyOwner nonReentrant {
+        require(amt > 0 && amt <= address(this).balance, "Invalid amount");
+        payable(owner()).transfer(amt);
     }
 
     function withdrawToken(
-        address token,
-        uint256 amount
+        address tok,
+        uint amt
     ) external onlyOwner nonReentrant {
-        require(amount > 0, "Invalid amount");
-        IERC20 erc20 = IERC20(token);
-        require(
-            amount <= erc20.balanceOf(address(this)),
-            "Insufficient balance"
-        );
-        require(erc20.transfer(owner(), amount), "Transfer failed");
+        require(amt > 0, "Invalid amount");
+        IERC20 t = IERC20(tok);
+        require(amt <= t.balanceOf(address(this)), "Insufficient balance");
+        require(t.transfer(owner(), amt), "Transfer failed");
     }
 
-    function getEventInfo(uint256 id) external view returns (EventInfo memory) {
-        Event storage e = events[id];
-        require(e.id != 0, "Nonexistent event");
-        uint256 checkedCount;
-        for (uint256 i = 1; i <= ticketIdCount; i++) {
-            if (_ticketEvent[i] == id && _checkTimes[i] > 0) {
-                checkedCount++;
+    function getCheckInStats(uint evId) internal view returns (uint checked, uint notChecked) {
+        checked = 0;
+        for (uint j = 1; j <= tixCount; j++) {
+            if (tixToEv[j] == evId && checkTimes[j] > 0) {
+                checked++;
             }
         }
-        return
-            EventInfo(
-                e.id,
-                e.name,
-                e.maxTix,
-                e.sold,
-                e.start,
-                e.end,
-                e.creator,
-                e.baseURI,
-                e.status,
-                e.data,
-                e.price,
-                e.catId,
-                checkedCount,
-                e.sold - checkedCount
-            );
+        notChecked = evs[evId].sold - checked;
+    }
+
+    function getEventInfo(uint evId) external view returns (EventInfo memory) {
+        Ev storage e = evs[evId];
+        require(e.id != 0, "Nonexistent event");
+
+        (uint checked, uint notChecked) = getCheckInStats(evId);
+
+        return EventInfo(
+            e.id,
+            e.name,
+            e.maxTix,
+            e.sold,
+            e.start,
+            e.end,
+            e.creator,
+            e.tokenURI,
+            e.status,
+            e.data,
+            e.price,
+            e.catId,
+            checked,
+            notChecked
+        );
     }
 
     function getEventsByPage(
-        uint256 page,
+        uint pg,
         uint8 status,
-        uint256 catId
+        uint catId
     ) external view returns (EventInfo[] memory) {
-        require(page > 0, "Invalid page");
+        require(pg > 0, "Invalid page");
         require(status <= 1, "Invalid status");
 
-        EventInfo[] memory details = new EventInfo[](10);
-        uint256 count;
-        uint256 processed;
-        uint256 startIdx = (page - 1) * 10;
+        EventInfo[] memory evDet = new EventInfo[](10);
+        uint cnt;
+        uint proc;
+        uint start = (pg - 1) * 10;
 
-        for (uint256 i = eventCount; i >= 1 && count < 10; i--) {
-            Event storage e = events[i];
+        for (uint i = evCount; i >= 1 && cnt < 10; i--) {
             if (
-                e.id != 0 &&
-                e.status == status &&
-                (catId == 0 || e.catId == catId)
+                evs[i].id != 0 &&
+                evs[i].status == status &&
+                (catId == 0 || evs[i].catId == catId)
             ) {
-                if (++processed > startIdx) {
-                    uint256 checkedCount;
-                    for (uint256 j = 1; j <= ticketIdCount; j++) {
-                        if (_ticketEvent[j] == i && _checkTimes[j] > 0) {
-                            checkedCount++;
-                        }
-                    }
-                    details[count] = EventInfo(
-                        e.id,
-                        e.name,
-                        e.maxTix,
-                        e.sold,
-                        e.start,
-                        e.end,
-                        e.creator,
-                        e.baseURI,
-                        e.status,
-                        e.data,
-                        e.price,
-                        e.catId,
-                        checkedCount,
-                        e.sold - checkedCount
+                if (++proc > start) {
+                    (uint checked, uint notChecked) = getCheckInStats(evs[i].id);
+                    evDet[cnt++] = EventInfo(
+                        evs[i].id,
+                        evs[i].name,
+                        evs[i].maxTix,
+                        evs[i].sold,
+                        evs[i].start,
+                        evs[i].end,
+                        evs[i].creator,
+                        evs[i].tokenURI,
+                        evs[i].status,
+                        evs[i].data,
+                        evs[i].price,
+                        evs[i].catId,
+                        checked,
+                        notChecked
                     );
-                    count++;
                 }
             }
             if (i == 1) break;
         }
-        return details;
+        return evDet;
     }
 
     function searchEventsByName(
-        uint256 page,
+        uint pg,
         uint8 status,
         string memory term
     ) external view returns (EventInfo[] memory) {
-        require(page > 0, "Invalid page");
+        require(pg > 0, "Invalid page");
         require(status <= 1, "Invalid status");
 
-        EventInfo[] memory details = new EventInfo[](10);
-        uint256 count;
-        uint256 processed;
-        uint256 startIdx = (page - 1) * 10;
-        string memory lowerTerm = term.toLower();
+        EventInfo[] memory evDet = new EventInfo[](10);
+        uint cnt;
+        uint proc;
+        uint start = (pg - 1) * 10;
+        string memory lowTerm = term.toLower();
 
-        for (uint256 i = eventCount; i >= 1 && count < 10; i--) {
-            Event storage e = events[i];
-            if (e.status == status && e.name.toLower().contains(lowerTerm)) {
-                if (++processed > startIdx) {
-                    uint256 checkedCount;
-                    for (uint256 j = 1; j <= ticketIdCount; j++) {
-                        if (_ticketEvent[j] == i && _checkTimes[j] > 0) {
-                            checkedCount++;
-                        }
-                    }
-                    details[count] = EventInfo(
-                        e.id,
-                        e.name,
-                        e.maxTix,
-                        e.sold,
-                        e.start,
-                        e.end,
-                        e.creator,
-                        e.baseURI,
-                        e.status,
-                        e.data,
-                        e.price,
-                        e.catId,
-                        checkedCount,
-                        e.sold - checkedCount
+        for (uint i = evCount; i >= 1 && cnt < 10; i--) {
+            if (
+                evs[i].status == status &&
+                evs[i].name.toLower().contains(lowTerm)
+            ) {
+                if (++proc > start) {
+                    (uint checked, uint notChecked) = getCheckInStats(evs[i].id);
+                    evDet[cnt++] = EventInfo(
+                        evs[i].id,
+                        evs[i].name,
+                        evs[i].maxTix,
+                        evs[i].sold,
+                        evs[i].start,
+                        evs[i].end,
+                        evs[i].creator,
+                        evs[i].tokenURI,
+                        evs[i].status,
+                        evs[i].data,
+                        evs[i].price,
+                        evs[i].catId,
+                        checked,
+                        notChecked
                     );
-                    count++;
                 }
             }
             if (i == 1) break;
         }
-        return details;
+        return evDet;
     }
 
-    function recoverTicket(uint256 tokenId) external nonReentrant {
-        require(_ownerOf(tokenId) != address(0), "Nonexistent token");
-        uint256 eventId = _ticketEvent[tokenId];
-        require(events[eventId].creator == msg.sender, "Not creator");
-        address owner = ownerOf(tokenId);
-        require(owner == DEAD_ADDRESS, "Not in dead address");
+    function recoverTicket(uint tixId) external nonReentrant {
+        require(_ownerOf(tixId) != address(0), "Nonexistent token");
+        uint evId = tixToEv[tixId];
+        require(evs[evId].creator == msg.sender, "Not creator");
+        address own = ownerOf(tixId);
+        require(own == DEAD, "Not in dead address");
 
-        uint256[] storage ownerTix = _ownerTickets[owner];
-        for (uint256 i = 0; i < ownerTix.length; i++) {
-            if (ownerTix[i] == tokenId) {
-                ownerTix[i] = ownerTix[ownerTix.length - 1];
-                ownerTix.pop();
+        uint[] storage ownTix = tixByOwn[own];
+        for (uint i = 0; i < ownTix.length; i++) {
+            if (ownTix[i] == tixId) {
+                ownTix[i] = ownTix[ownTix.length - 1];
+                ownTix.pop();
                 break;
             }
         }
 
-        _transfer(owner, msg.sender, tokenId);
-        _ownerTickets[msg.sender].push(tokenId);
-        emit TicketRecovered(eventId, tokenId, msg.sender, owner);
+        _transfer(own, msg.sender, tixId);
+        tixByOwn[msg.sender].push(tixId);
+        emit TicketRecovered(evId, tixId, msg.sender, own);
     }
 
     function getTicketsByEventAndPage(
-        uint256 eventId,
-        uint256 page
+        uint evId,
+        uint pg
     ) external view returns (string[] memory) {
-        require(events[eventId].id != 0, "Nonexistent event");
-        require(page > 0, "Invalid page");
+        require(evs[evId].id != 0, "Nonexistent event");
+        require(pg > 0, "Invalid page");
 
-        string[] memory details = new string[](10);
-        uint256 count;
-        uint256 processed;
-        uint256 startIdx = (page - 1) * 10;
+        string[] memory tixDet = new string[](10);
+        uint cnt;
+        uint proc;
+        uint start = (pg - 1) * 10;
 
-        for (uint256 i = ticketIdCount; i >= 1 && count < 10; i--) {
-            if (_ticketEvent[i] == eventId) {
-                if (++processed > startIdx) {
-                    address owner = _ownerOf(i);
-                    AttendeeInfo memory attendee = attendees[i];
-                    details[count] = string(
+        for (uint i = tixCount; i >= 1 && cnt < 10; i--) {
+            if (tixToEv[i] == evId) {
+                if (++proc > start) {
+                    address own = _ownerOf(i);
+                    AttInfo memory att = attInfo[i];
+                    tixDet[cnt++] = string(
                         abi.encodePacked(
-                            _uintToString(i),
+                            _uintToStr(i),
                             ",",
-                            _uintToString(eventId),
+                            _uintToStr(evId),
                             ",",
-                            _addressToString(owner),
+                            _addrToStr(own),
                             ",",
-                            attendee.name,
+                            att.name,
                             ",",
-                            attendee.gender ? "1" : "0",
+                            att.gender ? "1" : "0",
                             ",",
-                            attendee.email,
+                            att.email,
                             ",",
-                            attendee.phone,
+                            att.phone,
                             ",",
-                            _checkTimes[i] > 0 ? "1" : "0",
+                            checkTimes[i] > 0 ? "1" : "0",
                             ",",
-                            _uintToString(_checkTimes[i]),
+                            _uintToStr(checkTimes[i]),
                             ",",
-                            isCancelled[i] ? "1" : "0"
+                            tixCancel[i] ? "1" : "0"
                         )
                     );
-                    count++;
                 }
             }
             if (i == 1) break;
         }
-        return details;
+        return tixDet;
     }
 
     function getTotalEventsByAllCategories()
         external
         view
-        returns (uint256[15] memory)
+        returns (uint[15] memory)
     {
-        uint256[15] memory totals;
-        for (uint256 catId = 1; catId <= 15; catId++) {
-            uint256 total = 0;
-            for (uint256 i = 1; i <= eventCount; i++) {
-                if (events[i].id != 0 && events[i].catId == catId) {
-                    total++;
+        uint[15] memory tot;
+        for (uint catId = 1; catId <= 15; catId++) {
+            uint t = 0;
+            for (uint i = 1; i <= evCount; i++) {
+                if (evs[i].id != 0 && evs[i].catId == catId) {
+                    t++;
                 }
             }
-            totals[catId - 1] = total;
+            tot[catId - 1] = t;
         }
-        return totals;
+        return tot;
     }
 
-    function _uintToString(uint256 value) private pure returns (string memory) {
-        if (value == 0) return "0";
-        uint256 temp = value;
-        uint256 digits;
-        while (temp != 0) {
-            digits++;
-            temp /= 10;
+    function _uintToStr(uint v) private pure returns (string memory) {
+        if (v == 0) return "0";
+        uint t = v;
+        uint d;
+        while (t != 0) {
+            d++;
+            t /= 10;
         }
-        bytes memory buffer = new bytes(digits);
-        while (value != 0) {
-            buffer[--digits] = bytes1(uint8(48 + (value % 10)));
-            value /= 10;
+        bytes memory buf = new bytes(d);
+        while (v != 0) {
+            buf[--d] = bytes1(uint8(48 + (v % 10)));
+            v /= 10;
         }
-        return string(buffer);
+        return string(buf);
     }
 
-    function _addressToString(
-        address addr
-    ) private pure returns (string memory) {
-        bytes memory alphabet = "0123456789abcdef";
-        bytes memory str = new bytes(42);
-        str[0] = "0";
-        str[1] = "x";
-        for (uint256 i = 0; i < 20; i++) {
+    function _addrToStr(address a) private pure returns (string memory) {
+        bytes memory alpha = "0123456789abcdef";
+        bytes memory s = new bytes(42);
+        s[0] = "0";
+        s[1] = "x";
+        for (uint i = 0; i < 20; i++) {
             uint8 shift = uint8(8 * (19 - i));
-            str[2 + i * 2] = alphabet[uint8(uint160(addr) >> shift) & 0xf];
-            str[3 + i * 2] = alphabet[
-                uint8(uint160(addr) >> (shift + 4)) & 0xf
-            ];
+            s[2 + i * 2] = alpha[uint8(uint160(a) >> shift) & 0xf];
+            s[3 + i * 2] = alpha[uint8(uint160(a) >> (shift + 4)) & 0xf];
         }
-        return string(str);
+        return string(s);
     }
 
     function _update(
         address to,
-        uint256 tokenId,
+        uint tixId,
         address auth
     ) internal override returns (address) {
-        address from = super._update(to, tokenId, auth);
+        address from = super._update(to, tixId, auth);
 
         if (from != address(0)) {
-            uint256[] storage fromTix = _ownerTickets[from];
-            for (uint256 i = 0; i < fromTix.length; i++) {
-                if (fromTix[i] == tokenId) {
+            uint[] storage fromTix = tixByOwn[from];
+            for (uint i = 0; i < fromTix.length; i++) {
+                if (fromTix[i] == tixId) {
                     fromTix[i] = fromTix[fromTix.length - 1];
                     fromTix.pop();
                     break;
@@ -731,7 +695,7 @@ contract EventTicketNFT is ERC721, ReentrancyGuard, Ownable {
         }
 
         if (to != address(0)) {
-            _ownerTickets[to].push(tokenId);
+            tixByOwn[to].push(tixId);
         }
 
         return from;
