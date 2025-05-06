@@ -6,731 +6,680 @@ import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
-library StringUtils {
-    function toLower(string memory str) internal pure returns (string memory) {
-        bytes memory bStr = bytes(str);
-        for (uint256 i = 0; i < bStr.length; i++) {
-            uint8 char = uint8(bStr[i]);
-            if (char >= 65 && char <= 90) {
-                bStr[i] = bytes1(char + 32);
+library StrUtil {
+    function toLower(string memory s) internal pure returns (string memory) {
+        bytes memory b = bytes(s);
+        for (uint256 i = 0; i < b.length; i++) {
+            uint8 c = uint8(b[i]);
+            if (c >= 65 && c <= 90) {
+                b[i] = bytes1(c + 32);
             }
         }
-        return string(bStr);
+        return string(b);
     }
 
-    function contains(
-        string memory what,
-        string memory substr
-    ) internal pure returns (bool) {
-        bytes memory whatBytes = bytes(what);
-        bytes memory substrBytes = bytes(substr);
-        if (substrBytes.length > whatBytes.length) return false;
+    function contains(string memory w, string memory sub)
+        internal
+        pure
+        returns (bool)
+    {
+        bytes memory wb = bytes(w);
+        bytes memory sb = bytes(sub);
+        if (sb.length > wb.length) return false;
 
-        for (uint256 i = 0; i <= whatBytes.length - substrBytes.length; i++) {
-            bool found = true;
-            for (uint256 j = 0; j < substrBytes.length; j++) {
-                if (whatBytes[i + j] != substrBytes[j]) {
-                    found = false;
+        for (uint256 i = 0; i <= wb.length - sb.length; i++) {
+            bool f = true;
+            for (uint256 j = 0; j < sb.length; j++) {
+                if (wb[i + j] != sb[j]) {
+                    f = false;
                     break;
                 }
             }
-            if (found) return true;
+            if (f) return true;
         }
         return false;
     }
 }
 
 contract EventTicketNFT is ERC721, ReentrancyGuard, Ownable {
-    using StringUtils for string;
+    using StrUtil for string;
 
-    struct EventInput {
-        string eventName;
-        uint256 maxTickets;
-        uint256[2] timeRange;
-        string baseTokenURI;
-        string eventData;
-        uint256 ticketPrice;
-        uint256 categoryId;
+    struct EvIn {
+        string name;
+        uint256 maxTix;
+        uint256[2] time;
+        string uri;
+        string data;
+        uint256 price;
+        uint256 catId;
     }
 
-    struct Event {
-        uint256 eventId;
-        string eventName;
-        uint256 maxTickets;
-        uint256 ticketsSold;
-        uint256 startTime;
-        uint256 endTime;
+    struct Ev {
+        uint256 id;
+        string name;
+        uint256 maxTix;
+        uint256 sold;
+        uint256 start;
+        uint256 end;
         address creator;
-        string baseTokenURI;
+        string uri;
         uint8 status;
-        string eventData;
-        uint256 ticketPrice;
-        uint256 categoryId;
+        string data;
+        uint256 price;
+        uint256 catId;
     }
 
-    struct MyTicketInfo {
-        uint256 tokenId;
-        uint256 eventId;
-        bool checkedIn;
-        uint256 checkInTime;
+    struct TixInfo {
+        uint256 tId;
+        uint256 eId;
+        bool checked;
+        uint256 checkTime;
     }
 
-    struct AttendeeInfo {
-        string fullName;
+    struct AttInfo {
+        string name;
         bool gender;
         string email;
-        string phoneNumber;
+        string phone;
     }
 
-    struct TicketInput {
-        uint256 eventId;
-        string fullName;
+    struct TixIn {
+        uint256 eId;
+        string name;
         bool gender;
         string email;
-        string phoneNumber;
+        string phone;
     }
 
-    uint256 public eventCounter;
-    uint256 public ticketIdCounter;
-    uint256 public contractPercentage;
+    uint256 public eCnt;
+    uint256 public tIdCnt;
+    uint256 public feePct;
 
-    address private constant DEAD_ADDRESS =
-        0x000000000000000000000000000000000000dEaD;
+    address private constant DEAD = 0x000000000000000000000000000000000000dEaD;
 
-    mapping(uint256 => Event) public events;
-    mapping(uint256 => uint256) private _ticketToEvent;
-    mapping(uint256 => uint256) private _checkInTimestamps;
-    mapping(address => uint256[]) private _ticketsByOwner;
-    mapping(uint256 => bool) public isTicketCancelled;
-    mapping(uint256 => AttendeeInfo) public attendeeInfo;
+    mapping(uint256 => Ev) public evs;
+    mapping(uint256 => uint256) private tToE;
+    mapping(uint256 => uint256) private checkTs;
+    mapping(address => uint256[]) private tByOwn;
+    mapping(uint256 => bool) public tCancel;
+    mapping(uint256 => AttInfo) public attInfo;
 
     event EventCreated(
-        uint256 indexed eventId,
-        string eventName,
-        uint256 maxTickets,
-        string eventData,
-        uint256 ticketPrice,
-        uint256 categoryId
+        uint256 indexed eId,
+        string name,
+        uint256 maxTix,
+        string data,
+        uint256 price,
+        uint256 catId
     );
     event TicketMinted(
-        uint256 indexed eventId,
-        uint256 indexed ticketId,
-        address indexed owner,
-        string fullName,
+        uint256 indexed eId,
+        uint256 indexed tId,
+        address indexed own,
+        string name,
         bool gender,
         string email,
-        string phoneNumber
+        string phone
     );
     event CheckedIn(
-        uint256 indexed eventId,
-        uint256 indexed ticketId,
-        address indexed attendee,
-        uint256 timestamp
+        uint256 indexed eId,
+        uint256 indexed tId,
+        address indexed att,
+        uint256 ts
     );
-    event CheckInRemoved(uint256 indexed eventId, uint256 indexed ticketId);
-    event EventStatusUpdated(uint256 indexed eventId, uint8 newStatus);
-    event TicketCancelled(uint256 indexed eventId, uint256 indexed tokenId);
-    event TicketUncancelled(uint256 indexed eventId, uint256 indexed tokenId);
+    event CheckInRemoved(uint256 indexed eId, uint256 indexed tId);
+    event EventStatusUpdated(uint256 indexed eId, uint8 status);
+    event TicketCancelled(uint256 indexed eId, uint256 indexed tId);
+    event TicketUncancelled(uint256 indexed eId, uint256 indexed tId);
     event PaymentDistributed(
-        uint256 indexed eventId,
+        uint256 indexed eId,
         address indexed creator,
-        uint256 creatorAmount,
-        uint256 contractAmount
+        uint256 creatorAmt,
+        uint256 contractAmt
     );
-    event ContractPercentageUpdated(
-        uint256 oldPercentage,
-        uint256 newPercentage
-    );
+    event ContractPercentageUpdated(uint256 oldPct, uint256 newPct);
     event TicketRecovered(
-        uint256 indexed eventId,
-        uint256 indexed tokenId,
+        uint256 indexed eId,
+        uint256 indexed tId,
         address indexed creator,
-        address fromAddress
+        address from
     );
 
     constructor() ERC721("EventTicketNFT", "ETN") Ownable(msg.sender) {}
 
-    function setContractPercentage(uint256 newPercentage) external onlyOwner {
-        require(newPercentage <= 100, "Invalid percentage");
-        require(newPercentage != contractPercentage, "No change");
-        emit ContractPercentageUpdated(contractPercentage, newPercentage);
-        contractPercentage = newPercentage;
+    function setContractPercentage(uint256 newPct) external onlyOwner {
+        require(newPct <= 100, "Invalid percentage");
+        require(newPct != feePct, "No change");
+        emit ContractPercentageUpdated(feePct, newPct);
+        feePct = newPct;
     }
 
-    function createEvent(EventInput memory input) external {
-        require(input.maxTickets > 0, "Invalid ticket count");
-        require(bytes(input.eventName).length > 0, "Name required");
-        require(bytes(input.eventData).length > 0, "Data required");
-        require(
-            input.categoryId >= 1 && input.categoryId <= 15,
-            "Invalid category"
-        );
-        require(input.timeRange[1] >= input.timeRange[0], "Invalid time range");
+    function createEvent(EvIn memory inp) external {
+        require(inp.maxTix > 0, "Invalid ticket count");
+        require(bytes(inp.name).length > 0, "Name required");
+        require(bytes(inp.data).length > 0, "Data required");
+        require(inp.catId >= 1 && inp.catId <= 15, "Invalid category");
+        require(inp.time[1] >= inp.time[0], "Invalid time range");
 
-        eventCounter++;
-        events[eventCounter] = Event(
-            eventCounter,
-            input.eventName,
-            input.maxTickets,
+        eCnt++;
+        evs[eCnt] = Ev(
+            eCnt,
+            inp.name,
+            inp.maxTix,
             0,
-            input.timeRange[0],
-            input.timeRange[1],
+            inp.time[0],
+            inp.time[1],
             msg.sender,
-            input.baseTokenURI,
+            inp.uri,
             1,
-            input.eventData,
-            input.ticketPrice,
-            input.categoryId
+            inp.data,
+            inp.price,
+            inp.catId
         );
         emit EventCreated(
-            eventCounter,
-            input.eventName,
-            input.maxTickets,
-            input.eventData,
-            input.ticketPrice,
-            input.categoryId
+            eCnt,
+            inp.name,
+            inp.maxTix,
+            inp.data,
+            inp.price,
+            inp.catId
         );
     }
 
-    function updateEventStatus(uint256 eventId, uint8 newStatus) external {
-        require(events[eventId].creator == msg.sender, "Not creator");
-        require(newStatus <= 1, "Invalid status");
-        events[eventId].status = newStatus;
-        emit EventStatusUpdated(eventId, newStatus);
+    function updateEventStatus(uint256 eId, uint8 status) external {
+        require(evs[eId].creator == msg.sender, "Not creator");
+        require(status <= 1, "Invalid status");
+        evs[eId].status = status;
+        emit EventStatusUpdated(eId, status);
     }
 
-    function updateBaseTokenURI(
-        uint256 eventId,
-        string memory newURI
-    ) external {
-        require(events[eventId].creator == msg.sender, "Not creator");
-        events[eventId].baseTokenURI = newURI;
+    function updateBaseTokenURI(uint256 eId, string memory newURI) external {
+        require(evs[eId].creator == msg.sender, "Not creator");
+        evs[eId].uri = newURI;
     }
 
-    function tokenURI(
-        uint256 tokenId
-    ) public view override returns (string memory) {
-        require(_ownerOf(tokenId) != address(0), "Nonexistent token");
-        return
-            string(
-                abi.encodePacked(events[_ticketToEvent[tokenId]].baseTokenURI)
-            );
+    function tokenURI(uint256 tId)
+        public
+        view
+        override
+        returns (string memory)
+    {
+        require(_ownerOf(tId) != address(0), "Nonexistent token");
+        return string(abi.encodePacked(evs[tToE[tId]].uri));
     }
 
-    function updateEvent(EventInput memory input, uint256 eventId) external {
-        Event storage e = events[eventId];
+    function updateEvent(EvIn memory inp, uint256 eId) external {
+        Ev storage e = evs[eId];
         require(msg.sender == e.creator, "Not creator");
-        require(input.maxTickets >= e.ticketsSold, "Invalid ticket count");
-        require(bytes(input.eventName).length > 0, "Name required");
-        require(bytes(input.eventData).length > 0, "Data required");
-        require(
-            input.categoryId >= 1 && input.categoryId <= 15,
-            "Invalid category"
-        );
-        require(input.timeRange[1] >= input.timeRange[0], "Invalid time range");
+        require(inp.maxTix >= e.sold, "Invalid ticket count");
+        require(bytes(inp.name).length > 0, "Name required");
+        require(bytes(inp.data).length > 0, "Data required");
+        require(inp.catId >= 1 && inp.catId <= 15, "Invalid category");
+        require(inp.time[1] >= inp.time[0], "Invalid time range");
 
-        e.eventName = input.eventName;
-        e.maxTickets = input.maxTickets;
-        e.startTime = input.timeRange[0];
-        e.endTime = input.timeRange[1];
-        e.baseTokenURI = input.baseTokenURI;
-        e.eventData = input.eventData;
-        e.ticketPrice = input.ticketPrice;
-        e.categoryId = input.categoryId;
+        e.name = inp.name;
+        e.maxTix = inp.maxTix;
+        e.start = inp.time[0];
+        e.end = inp.time[1];
+        e.uri = inp.uri;
+        e.data = inp.data;
+        e.price = inp.price;
+        e.catId = inp.catId;
         emit EventCreated(
-            eventId,
-            input.eventName,
-            input.maxTickets,
-            input.eventData,
-            input.ticketPrice,
-            input.categoryId
+            eId,
+            inp.name,
+            inp.maxTix,
+            inp.data,
+            inp.price,
+            inp.catId
         );
     }
 
-    function mintTicket(
-        TicketInput memory input
-    ) external payable nonReentrant {
-        Event storage e = events[input.eventId];
-        require(e.eventId != 0, "Nonexistent event");
+    function mintTicket(TixIn memory inp) external payable nonReentrant {
+        Ev storage e = evs[inp.eId];
+        require(e.id != 0, "Nonexistent event");
         require(
-            block.timestamp >= e.startTime && block.timestamp <= e.endTime,
+            block.timestamp >= e.start && block.timestamp <= e.end,
             "Event inactive"
         );
-        require(e.ticketsSold < e.maxTickets, "Sold out");
+        require(e.sold < e.maxTix, "Sold out");
         require(e.status == 1, "Event not active");
-        require(bytes(input.fullName).length > 0, "Name required");
-        require(bytes(input.email).length > 0, "Email required");
-        require(bytes(input.phoneNumber).length > 0, "Phone required");
+        require(bytes(inp.name).length > 0, "Name required");
+        require(bytes(inp.email).length > 0, "Email required");
+        require(bytes(inp.phone).length > 0, "Phone required");
 
-        uint256[] storage userTickets = _ticketsByOwner[msg.sender];
-        for (uint256 i = 0; i < userTickets.length; i++) {
-            uint256 existingTokenId = userTickets[i];
-            if (
-                _ticketToEvent[existingTokenId] == input.eventId &&
-                !isTicketCancelled[existingTokenId]
-            ) {
+        uint256[] storage uTix = tByOwn[msg.sender];
+        for (uint256 i = 0; i < uTix.length; i++) {
+            uint256 existingTId = uTix[i];
+            if (tToE[existingTId] == inp.eId && !tCancel[existingTId]) {
                 revert("Already owns ticket");
             }
         }
 
-        if (e.ticketPrice > 0) {
-            require(msg.value >= e.ticketPrice, "Insufficient payment");
-            uint256 contractAmount = (e.ticketPrice * contractPercentage) / 100;
-            uint256 creatorAmount = e.ticketPrice - contractAmount;
+        if (e.price > 0) {
+            require(msg.value >= e.price, "Insufficient payment");
+            uint256 cAmt = (e.price * feePct) / 100;
+            uint256 crAmt = e.price - cAmt;
 
-            (bool success, ) = e.creator.call{value: creatorAmount}("");
-            require(success, "Payment failed");
+            (bool s, ) = e.creator.call{value: crAmt}("");
+            require(s, "Payment failed");
 
-            emit PaymentDistributed(
-                input.eventId,
-                e.creator,
-                creatorAmount,
-                contractAmount
-            );
+            emit PaymentDistributed(inp.eId, e.creator, crAmt, cAmt);
 
-            if (msg.value > e.ticketPrice) {
-                payable(msg.sender).transfer(msg.value - e.ticketPrice);
+            if (msg.value > e.price) {
+                payable(msg.sender).transfer(msg.value - e.price);
             }
         }
 
-        uint256 tokenId = ++ticketIdCounter;
-        _safeMint(msg.sender, tokenId);
-        _ticketToEvent[tokenId] = input.eventId;
-        userTickets.push(tokenId);
-        e.ticketsSold++;
-        attendeeInfo[tokenId] = AttendeeInfo(
-            input.fullName,
-            input.gender,
-            input.email,
-            input.phoneNumber
-        );
+        uint256 tId = ++tIdCnt;
+        _safeMint(msg.sender, tId);
+        tToE[tId] = inp.eId;
+        uTix.push(tId);
+        e.sold++;
+        attInfo[tId] = AttInfo(inp.name, inp.gender, inp.email, inp.phone);
         emit TicketMinted(
-            input.eventId,
-            tokenId,
+            inp.eId,
+            tId,
             msg.sender,
-            input.fullName,
-            input.gender,
-            input.email,
-            input.phoneNumber
+            inp.name,
+            inp.gender,
+            inp.email,
+            inp.phone
         );
     }
 
-    function checkIn(uint256 tokenId) external {
-        require(_ownerOf(tokenId) != address(0), "Nonexistent token");
-        uint256 eventId = _ticketToEvent[tokenId];
-        require(ownerOf(tokenId) == msg.sender, "Not owner");
-        require(_checkInTimestamps[tokenId] == 0, "Already checked in");
-        require(!isTicketCancelled[tokenId], "Ticket cancelled");
-        require(events[eventId].status == 1, "Event not active");
+    function checkIn(uint256 tId) external {
+        require(_ownerOf(tId) != address(0), "Nonexistent token");
+        uint256 eId = tToE[tId];
+        require(ownerOf(tId) == msg.sender, "Not owner");
+        require(checkTs[tId] == 0, "Already checked in");
+        require(!tCancel[tId], "Ticket cancelled");
+        require(evs[eId].status == 1, "Event not active");
         require(
-            block.timestamp >= events[eventId].startTime &&
-                block.timestamp <= events[eventId].endTime + 1 hours,
+            block.timestamp >= evs[eId].start &&
+                block.timestamp <= evs[eId].end + 1 hours,
             "Check-in closed"
         );
 
-        _checkInTimestamps[tokenId] = block.timestamp;
-        emit CheckedIn(eventId, tokenId, msg.sender, block.timestamp);
+        checkTs[tId] = block.timestamp;
+        emit CheckedIn(eId, tId, msg.sender, block.timestamp);
     }
 
-    function getTicketInfo(
-        uint256 tokenId
-    )
+    function getTicketInfo(uint256 tId)
         external
         view
         returns (
-            uint256 eventId,
-            address owner,
-            bool checkedInStatus,
-            uint256 timestamp,
-            string memory eventName,
-            uint8 eventStatus,
-            AttendeeInfo memory attendee,
-            bool ticketCancelled
+            uint256 eId,
+            address own,
+            bool checked,
+            uint256 ts,
+            string memory eName,
+            uint8 eStatus,
+            AttInfo memory att,
+            bool tCanc
         )
     {
-        require(_ownerOf(tokenId) != address(0), "Nonexistent token");
-        eventId = _ticketToEvent[tokenId];
-        Event storage e = events[eventId];
-        owner = ownerOf(tokenId);
-        checkedInStatus = _checkInTimestamps[tokenId] > 0;
-        timestamp = _checkInTimestamps[tokenId];
-        eventName = e.eventName;
-        eventStatus = e.status;
-        attendee = attendeeInfo[tokenId];
-        ticketCancelled = isTicketCancelled[tokenId];
+        require(_ownerOf(tId) != address(0), "Nonexistent token");
+        eId = tToE[tId];
+        Ev storage e = evs[eId];
+        own = ownerOf(tId);
+        checked = checkTs[tId] > 0;
+        ts = checkTs[tId];
+        eName = e.name;
+        eStatus = e.status;
+        att = attInfo[tId];
+        tCanc = tCancel[tId];
     }
 
-    function removeCheckIn(uint256 tokenId) external {
-        require(_ownerOf(tokenId) != address(0), "Nonexistent token");
-        uint256 eventId = _ticketToEvent[tokenId];
+    function removeCheckIn(uint256 tId) external {
+        require(_ownerOf(tId) != address(0), "Nonexistent token");
+        uint256 eId = tToE[tId];
         require(
-            events[eventId].creator == msg.sender ||
-                ownerOf(tokenId) == msg.sender,
+            evs[eId].creator == msg.sender || ownerOf(tId) == msg.sender,
             "Not authorized"
         );
-        require(_checkInTimestamps[tokenId] > 0, "Not checked in");
+        require(checkTs[tId] > 0, "Not checked in");
 
-        _checkInTimestamps[tokenId] = 0;
-        emit CheckInRemoved(eventId, tokenId);
+        checkTs[tId] = 0;
+        emit CheckInRemoved(eId, tId);
     }
 
     function getMyTickets()
         external
         view
-        returns (MyTicketInfo[] memory, AttendeeInfo[] memory)
+        returns (TixInfo[] memory, AttInfo[] memory)
     {
-        uint256[] memory userTickets = _ticketsByOwner[msg.sender];
-        MyTicketInfo[] memory ticketInfo = new MyTicketInfo[](
-            userTickets.length
-        );
-        AttendeeInfo[] memory attendeeDetails = new AttendeeInfo[](
-            userTickets.length
-        );
+        uint256[] memory uTix = tByOwn[msg.sender];
+        TixInfo[] memory tInfo = new TixInfo[](uTix.length);
+        AttInfo[] memory aInfo = new AttInfo[](uTix.length);
 
-        for (uint256 i = 0; i < userTickets.length; i++) {
-            uint256 tokenId = userTickets[i];
-            ticketInfo[i] = MyTicketInfo(
-                tokenId,
-                _ticketToEvent[tokenId],
-                _checkInTimestamps[tokenId] > 0,
-                _checkInTimestamps[tokenId]
-            );
-            attendeeDetails[i] = attendeeInfo[tokenId];
+        for (uint256 i = 0; i < uTix.length; i++) {
+            uint256 tId = uTix[i];
+            tInfo[i] = TixInfo(tId, tToE[tId], checkTs[tId] > 0, checkTs[tId]);
+            aInfo[i] = attInfo[tId];
         }
-        return (ticketInfo, attendeeDetails);
+        return (tInfo, aInfo);
     }
 
-    function getEventTicketsWithName(
-        address user,
-        uint256 eventId
-    )
-        external
-        view
-        returns (uint256[] memory, string memory, AttendeeInfo[] memory)
-    {
-        uint256[] memory allTickets = _ticketsByOwner[user];
-        uint256 count;
-        for (uint256 i = 0; i < allTickets.length; i++) {
-            if (_ticketToEvent[allTickets[i]] == eventId) count++;
-        }
-
-        uint256[] memory filtered = new uint256[](count);
-        AttendeeInfo[] memory attendees = new AttendeeInfo[](count);
-        uint256 j;
-        for (uint256 i = 0; i < allTickets.length; i++) {
-            if (_ticketToEvent[allTickets[i]] == eventId) {
-                filtered[j] = allTickets[i];
-                attendees[j] = attendeeInfo[allTickets[i]];
-                j++;
-            }
-        }
-        return (filtered, events[eventId].eventName, attendees);
-    }
-
-    function cancelTicket(uint256 tokenId) external {
-        require(_ownerOf(tokenId) != address(0), "Nonexistent token");
-        uint256 eventId = _ticketToEvent[tokenId];
-        require(events[eventId].creator == msg.sender, "Not creator");
-        require(!isTicketCancelled[tokenId], "Already cancelled");
-
-        isTicketCancelled[tokenId] = true;
-        emit TicketCancelled(eventId, tokenId);
-    }
-
-    function unCancelTicket(uint256 tokenId) external {
-        require(_ownerOf(tokenId) != address(0), "Nonexistent token");
-        uint256 eventId = _ticketToEvent[tokenId];
-        require(events[eventId].creator == msg.sender, "Not creator");
-        require(isTicketCancelled[tokenId], "Not cancelled");
-
-        isTicketCancelled[tokenId] = false;
-        emit TicketUncancelled(eventId, tokenId);
-    }
-
-    function withdrawTokenNative(
-        uint256 amount
-    ) external onlyOwner nonReentrant {
-        require(
-            amount > 0 && amount <= address(this).balance,
-            "Invalid amount"
-        );
-        payable(owner()).transfer(amount);
-    }
-
-    function withdrawToken(
-        address tokenContract,
-        uint256 amount
-    ) external onlyOwner nonReentrant {
-        require(amount > 0, "Invalid amount");
-        IERC20 token = IERC20(tokenContract);
-        require(
-            amount <= token.balanceOf(address(this)),
-            "Insufficient balance"
-        );
-        require(token.transfer(owner(), amount), "Transfer failed");
-    }
-
-    function getEventInfo(
-        uint256 eventId
-    )
+    function getEventTicketsWithName(address usr, uint256 eId)
         external
         view
         returns (
-            uint256 _eventId,
-            string memory eventName,
-            uint256 maxTickets,
-            uint256 ticketsSold,
-            uint256 startTime,
-            uint256 endTime,
-            address creator,
-            string memory baseTokenURI,
-            uint8 status,
-            string memory eventData,
-            uint256 ticketPrice,
-            uint256 categoryId,
-            uint256 checkedInCount,
-            uint256 notCheckedInCount
+            uint256[] memory,
+            string memory,
+            AttInfo[] memory
         )
     {
-        Event storage e = events[eventId];
-        require(e.eventId != 0, "Nonexistent event");
-        (checkedInCount, notCheckedInCount) = _getEventCheckInStats(eventId);
+        uint256[] memory allTix = tByOwn[usr];
+        uint256 cnt;
+        for (uint256 i = 0; i < allTix.length; i++) {
+            if (tToE[allTix[i]] == eId) cnt++;
+        }
+
+        uint256[] memory filt = new uint256[](cnt);
+        AttInfo[] memory atts = new AttInfo[](cnt);
+        uint256 j;
+        for (uint256 i = 0; i < allTix.length; i++) {
+            if (tToE[allTix[i]] == eId) {
+                filt[j] = allTix[i];
+                atts[j] = attInfo[allTix[i]];
+                j++;
+            }
+        }
+        return (filt, evs[eId].name, atts);
+    }
+
+    function cancelTicket(uint256 tId) external {
+        require(_ownerOf(tId) != address(0), "Nonexistent token");
+        uint256 eId = tToE[tId];
+        require(evs[eId].creator == msg.sender, "Not creator");
+        require(!tCancel[tId], "Already cancelled");
+
+        tCancel[tId] = true;
+        emit TicketCancelled(eId, tId);
+    }
+
+    function unCancelTicket(uint256 tId) external {
+        require(_ownerOf(tId) != address(0), "Nonexistent token");
+        uint256 eId = tToE[tId];
+        require(evs[eId].creator == msg.sender, "Not creator");
+        require(tCancel[tId], "Not cancelled");
+
+        tCancel[tId] = false;
+        emit TicketUncancelled(eId, tId);
+    }
+
+    function withdrawTokenNative(uint256 amt) external onlyOwner nonReentrant {
+        require(amt > 0 && amt <= address(this).balance, "Invalid amount");
+        payable(owner()).transfer(amt);
+    }
+
+    function withdrawToken(address tkn, uint256 amt)
+        external
+        onlyOwner
+        nonReentrant
+    {
+        require(amt > 0, "Invalid amount");
+        IERC20 t = IERC20(tkn);
+        require(amt <= t.balanceOf(address(this)), "Insufficient balance");
+        require(t.transfer(owner(), amt), "Transfer failed");
+    }
+
+    function getEventInfo(uint256 eId)
+        external
+        view
+        returns (
+            uint256 id,
+            string memory name,
+            uint256 maxTix,
+            uint256 sold,
+            uint256 start,
+            uint256 end,
+            address creator,
+            string memory uri,
+            uint8 status,
+            string memory data,
+            uint256 price,
+            uint256 catId,
+            uint256 chkInCnt,
+            uint256 notChkInCnt
+        )
+    {
+        Ev storage e = evs[eId];
+        require(e.id != 0, "Nonexistent event");
+        (chkInCnt, notChkInCnt) = _getEventCheckInStats(eId);
         return (
-            e.eventId,
-            e.eventName,
-            e.maxTickets,
-            e.ticketsSold,
-            e.startTime,
-            e.endTime,
+            e.id,
+            e.name,
+            e.maxTix,
+            e.sold,
+            e.start,
+            e.end,
             e.creator,
-            e.baseTokenURI,
+            e.uri,
             e.status,
-            e.eventData,
-            e.ticketPrice,
-            e.categoryId,
-            checkedInCount,
-            notCheckedInCount
+            e.data,
+            e.price,
+            e.catId,
+            chkInCnt,
+            notChkInCnt
         );
     }
 
-    function getEventCheckInStats(
-        uint256 eventId
-    )
+    function getEventCheckInStats(uint256 eId)
         external
         view
-        returns (uint256 checkedInCount, uint256 notCheckedInCount)
+        returns (uint256 chkInCnt, uint256 notChkInCnt)
     {
-        return _getEventCheckInStats(eventId);
+        return _getEventCheckInStats(eId);
     }
 
-    function _getEventCheckInStats(
-        uint256 eventId
-    )
+    function _getEventCheckInStats(uint256 eId)
         internal
         view
-        returns (uint256 checkedInCount, uint256 notCheckedInCount)
+        returns (uint256 chkInCnt, uint256 notChkInCnt)
     {
-        require(events[eventId].eventId != 0, "Nonexistent event");
-        uint256 count;
-        for (uint256 i = 1; i <= ticketIdCounter; i++) {
-            if (_ticketToEvent[i] == eventId && _checkInTimestamps[i] > 0) {
-                count++;
+        require(evs[eId].id != 0, "Nonexistent event");
+        uint256 cnt;
+        for (uint256 i = 1; i <= tIdCnt; i++) {
+            if (tToE[i] == eId && checkTs[i] > 0) {
+                cnt++;
             }
         }
-        checkedInCount = count;
-        notCheckedInCount = events[eventId].ticketsSold - count;
+        chkInCnt = cnt;
+        notChkInCnt = evs[eId].sold - cnt;
     }
 
     function getEventsByPage(
-        uint256 pageNumber,
+        uint256 pg,
         uint8 status,
-        uint256 categoryId
+        uint256 catId
     ) external view returns (string[] memory) {
-        require(pageNumber > 0, "Invalid page");
+        require(pg > 0, "Invalid page");
         require(status <= 1, "Invalid status");
 
-        string[] memory eventDetails = new string[](10);
-        uint256 count;
-        uint256 processed;
-        uint256 startIndex = (pageNumber - 1) * 10;
+        string[] memory eDets = new string[](10);
+        uint256 cnt;
+        uint256 proc;
+        uint256 start = (pg - 1) * 10;
 
-        for (uint256 i = eventCounter; i >= 1 && count < 10; i--) {
+        for (uint256 i = eCnt; i >= 1 && cnt < 10; i--) {
             if (
-                events[i].eventId != 0 &&
-                events[i].status == status &&
-                (categoryId == 0 || events[i].categoryId == categoryId)
+                evs[i].id != 0 &&
+                evs[i].status == status &&
+                (catId == 0 || evs[i].catId == catId)
             ) {
-                if (++processed > startIndex) {
+                if (++proc > start) {
                     (
-                        uint256 checkedInCount,
-                        uint256 notCheckedInCount
+                        uint256 chkInCnt,
+                        uint256 notChkInCnt
                     ) = _getEventCheckInStats(i);
-                    eventDetails[count++] = string(
+                    eDets[cnt++] = string(
                         abi.encodePacked(
-                            _uintToString(events[i].eventId),
+                            _uintToString(evs[i].id),
                             ",",
-                            events[i].eventName,
+                            evs[i].name,
                             ",",
-                            _uintToString(events[i].maxTickets),
+                            _uintToString(evs[i].maxTix),
                             ",",
-                            _uintToString(events[i].ticketsSold),
+                            _uintToString(evs[i].sold),
                             ",",
-                            _uintToString(events[i].startTime),
+                            _uintToString(evs[i].start),
                             ",",
-                            _uintToString(events[i].endTime),
+                            _uintToString(evs[i].end),
                             ",",
-                            _addressToString(events[i].creator),
+                            _addressToString(evs[i].creator),
                             ",",
-                            events[i].baseTokenURI,
+                            evs[i].uri,
                             ",",
-                            _uintToString(events[i].status),
+                            _uintToString(evs[i].status),
                             ",",
-                            events[i].eventData,
+                            evs[i].data,
                             ",",
-                            _uintToString(events[i].ticketPrice),
+                            _uintToString(evs[i].price),
                             ",",
-                            _uintToString(events[i].categoryId),
+                            _uintToString(evs[i].catId),
                             ",",
-                            _uintToString(checkedInCount),
+                            _uintToString(chkInCnt),
                             ",",
-                            _uintToString(notCheckedInCount)
+                            _uintToString(notChkInCnt)
                         )
                     );
                 }
             }
             if (i == 1) break;
         }
-        return eventDetails;
+        return eDets;
     }
 
     function searchEventsByName(
-        uint256 pageNumber,
+        uint256 pg,
         uint8 status,
-        string memory searchTerm
+        string memory term
     ) external view returns (string[] memory) {
-        require(pageNumber > 0, "Invalid page");
+        require(pg > 0, "Invalid page");
         require(status <= 1, "Invalid status");
 
-        string[] memory eventDetails = new string[](10);
-        uint256 count;
-        uint256 processed;
-        uint256 startIndex = (pageNumber - 1) * 10;
-        string memory searchLower = searchTerm.toLower();
+        string[] memory eDets = new string[](10);
+        uint256 cnt;
+        uint256 proc;
+        uint256 start = (pg - 1) * 10;
+        string memory sLow = term.toLower();
 
-        for (uint256 i = eventCounter; i >= 1 && count < 10; i--) {
+        for (uint256 i = eCnt; i >= 1 && cnt < 10; i--) {
             if (
-                events[i].status == status &&
-                events[i].eventName.toLower().contains(searchLower)
+                evs[i].status == status && evs[i].name.toLower().contains(sLow)
             ) {
-                if (++processed > startIndex) {
+                if (++proc > start) {
                     (
-                        uint256 checkedInCount,
-                        uint256 notCheckedInCount
+                        uint256 chkInCnt,
+                        uint256 notChkInCnt
                     ) = _getEventCheckInStats(i);
-                    eventDetails[count++] = string(
+                    eDets[cnt++] = string(
                         abi.encodePacked(
-                            _uintToString(events[i].eventId),
+                            _uintToString(evs[i].id),
                             ",",
-                            events[i].eventName,
+                            evs[i].name,
                             ",",
-                            _uintToString(events[i].maxTickets),
+                            _uintToString(evs[i].maxTix),
                             ",",
-                            _uintToString(events[i].ticketsSold),
+                            _uintToString(evs[i].sold),
                             ",",
-                            _uintToString(events[i].startTime),
+                            _uintToString(evs[i].start),
                             ",",
-                            _uintToString(events[i].endTime),
+                            _uintToString(evs[i].end),
                             ",",
-                            _addressToString(events[i].creator),
+                            _addressToString(evs[i].creator),
                             ",",
-                            events[i].baseTokenURI,
+                            evs[i].uri,
                             ",",
-                            _uintToString(events[i].status),
+                            _uintToString(evs[i].status),
                             ",",
-                            events[i].eventData,
+                            evs[i].data,
                             ",",
-                            _uintToString(events[i].ticketPrice),
+                            _uintToString(evs[i].price),
                             ",",
-                            _uintToString(events[i].categoryId),
+                            _uintToString(evs[i].catId),
                             ",",
-                            _uintToString(checkedInCount),
+                            _uintToString(chkInCnt),
                             ",",
-                            _uintToString(notCheckedInCount)
+                            _uintToString(notChkInCnt)
                         )
                     );
                 }
             }
             if (i == 1) break;
         }
-        return eventDetails;
+        return eDets;
     }
 
-    function recoverTicket(uint256 tokenId) external nonReentrant {
-        require(_ownerOf(tokenId) != address(0), "Nonexistent token");
-        uint256 eventId = _ticketToEvent[tokenId];
-        require(events[eventId].creator == msg.sender, "Not creator");
-        address currentOwner = ownerOf(tokenId);
-        require(currentOwner == DEAD_ADDRESS, "Not in dead address");
+    function recoverTicket(uint256 tId) external nonReentrant {
+        require(_ownerOf(tId) != address(0), "Nonexistent token");
+        uint256 eId = tToE[tId];
+        require(evs[eId].creator == msg.sender, "Not creator");
+        address own = ownerOf(tId);
+        require(own == DEAD, "Not in dead address");
 
-        uint256[] storage ownerTickets = _ticketsByOwner[currentOwner];
-        for (uint256 i = 0; i < ownerTickets.length; i++) {
-            if (ownerTickets[i] == tokenId) {
-                ownerTickets[i] = ownerTickets[ownerTickets.length - 1];
-                ownerTickets.pop();
+        uint256[] storage oTix = tByOwn[own];
+        for (uint256 i = 0; i < oTix.length; i++) {
+            if (oTix[i] == tId) {
+                oTix[i] = oTix[oTix.length - 1];
+                oTix.pop();
                 break;
             }
         }
 
-        _transfer(currentOwner, msg.sender, tokenId);
-        _ticketsByOwner[msg.sender].push(tokenId);
-        emit TicketRecovered(eventId, tokenId, msg.sender, currentOwner);
+        _transfer(own, msg.sender, tId);
+        tByOwn[msg.sender].push(tId);
+        emit TicketRecovered(eId, tId, msg.sender, own);
     }
 
-    function getTicketsByEventAndPage(
-        uint256 eventId,
-        uint256 pageNumber
-    ) external view returns (string[] memory) {
-        require(events[eventId].eventId != 0, "Nonexistent event");
-        require(pageNumber > 0, "Invalid page");
+    function getTicketsByEventAndPage(uint256 eId, uint256 pg)
+        external
+        view
+        returns (string[] memory)
+    {
+        require(evs[eId].id != 0, "Nonexistent event");
+        require(pg > 0, "Invalid page");
 
-        string[] memory ticketDetails = new string[](10);
-        uint256 count;
-        uint256 processed;
-        uint256 startIndex = (pageNumber - 1) * 10;
+        string[] memory tDets = new string[](10);
+        uint256 cnt;
+        uint256 proc;
+        uint256 start = (pg - 1) * 10;
 
-        for (uint256 i = ticketIdCounter; i >= 1 && count < 10; i--) {
-            if (_ticketToEvent[i] == eventId) {
-                if (++processed > startIndex) {
-                    address owner = _ownerOf(i);
-                    AttendeeInfo memory attendee = attendeeInfo[i];
-                    ticketDetails[count++] = string(
+        for (uint256 i = tIdCnt; i >= 1 && cnt < 10; i--) {
+            if (tToE[i] == eId) {
+                if (++proc > start) {
+                    address own = _ownerOf(i);
+                    AttInfo memory att = attInfo[i];
+                    tDets[cnt++] = string(
                         abi.encodePacked(
                             _uintToString(i),
                             ",",
-                            _uintToString(eventId),
+                            _uintToString(eId),
                             ",",
-                            _addressToString(owner),
+                            _addressToString(own),
                             ",",
-                            attendee.fullName,
+                            att.name,
                             ",",
-                            attendee.gender ? "1" : "0",
+                            att.gender ? "1" : "0",
                             ",",
-                            attendee.email,
+                            att.email,
                             ",",
-                            attendee.phoneNumber,
+                            att.phone,
                             ",",
-                            _checkInTimestamps[i] > 0 ? "1" : "0",
+                            checkTs[i] > 0 ? "1" : "0",
                             ",",
-                            _uintToString(_checkInTimestamps[i]),
+                            _uintToString(checkTs[i]),
                             ",",
-                            isTicketCancelled[i] ? "1" : "0"
+                            tCancel[i] ? "1" : "0"
                         )
                     );
                 }
             }
             if (i == 1) break;
         }
-        return ticketDetails;
+        return tDets;
     }
 
     function getTotalEventsByAllCategories()
@@ -738,74 +687,68 @@ contract EventTicketNFT is ERC721, ReentrancyGuard, Ownable {
         view
         returns (uint256[15] memory)
     {
-        uint256[15] memory totals;
-        for (uint256 categoryId = 1; categoryId <= 15; categoryId++) {
-            uint256 total = 0;
-            for (uint256 i = 1; i <= eventCounter; i++) {
-                if (
-                    events[i].eventId != 0 && events[i].categoryId == categoryId
-                ) {
-                    total++;
+        uint256[15] memory tots;
+        for (uint256 catId = 1; catId <= 15; catId++) {
+            uint256 tot = 0;
+            for (uint256 i = 1; i <= eCnt; i++) {
+                if (evs[i].id != 0 && evs[i].catId == catId) {
+                    tot++;
                 }
             }
-            totals[categoryId - 1] = total;
+            tots[catId - 1] = tot;
         }
-        return totals;
+        return tots;
     }
 
-    function _uintToString(uint256 value) private pure returns (string memory) {
-        if (value == 0) return "0";
-        uint256 temp = value;
-        uint256 digits;
-        while (temp != 0) {
-            digits++;
-            temp /= 10;
+    function _uintToString(uint256 v) private pure returns (string memory) {
+        if (v == 0) return "0";
+        uint256 t = v;
+        uint256 d;
+        while (t != 0) {
+            d++;
+            t /= 10;
         }
-        bytes memory buffer = new bytes(digits);
-        while (value != 0) {
-            buffer[--digits] = bytes1(uint8(48 + (value % 10)));
-            value /= 10;
+        bytes memory b = new bytes(d);
+        while (v != 0) {
+            b[--d] = bytes1(uint8(48 + (v % 10)));
+            v /= 10;
         }
-        return string(buffer);
+        return string(b);
     }
 
-    function _addressToString(
-        address addr
-    ) private pure returns (string memory) {
-        bytes memory alphabet = "0123456789abcdef";
-        bytes memory str = new bytes(42);
-        str[0] = "0";
-        str[1] = "x";
+    function _addressToString(address a) private pure returns (string memory) {
+        bytes memory alp = "0123456789abcdef";
+        bytes memory s = new bytes(42);
+        s[0] = "0";
+        s[1] = "x";
         for (uint256 i = 0; i < 20; i++) {
-            uint8 shift = uint8(8 * (19 - i));
-            str[2 + i * 2] = alphabet[uint8(uint160(addr) >> shift) & 0xf];
-            str[3 + i * 2] = alphabet[
-                uint8(uint160(addr) >> (shift + 4)) & 0xf
-            ];
+            uint8 sh = uint8(8 * (19 - i));
+            s[2 + i * 2] = alp[uint8(uint160(a) >> sh) & 0xf];
+            s[3 + i * 2] = alp[uint8(uint160(a) >> (sh + 4)) & 0xf];
         }
-        return string(str);
+        return string(s);
     }
 
     function _update(
         address to,
-        uint256 tokenId,
+        uint256 tId,
         address auth
     ) internal override returns (address) {
-        address from = super._update(to, tokenId, auth);
+        address from = super._update(to, tId, auth);
 
         if (from != address(0)) {
-            uint256[] storage fromTickets = _ticketsByOwner[from];
-            for (uint256 i = 0; i < fromTickets.length; i++) {
-                if (fromTickets[i] == tokenId) {
-                    fromTickets[i] = fromTickets[fromTickets.length - 1];
-                    fromTickets.pop();
+            uint256[] storage fTix = tByOwn[from];
+            for (uint256 i = 0; i < fTix.length; i++) {
+                if (fTix[i] == tId) {
+                    fTix[i] = fTix[fTix.length - 1];
+                    fTix.pop();
                     break;
                 }
             }
         }
 
         if (to != address(0)) {
-            _ticketsByOwner[to].push(tokenId);
+            tByOwn[to].push(tId);
         }
 
         return from;
