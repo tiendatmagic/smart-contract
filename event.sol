@@ -138,6 +138,7 @@ contract EventTicketNFT is ERC721, ReentrancyGuard, Ownable {
         address indexed att,
         uint256 ts
     );
+
     event CheckInRemoved(uint256 indexed eId, uint256 indexed tId);
     event EventStatusUpdated(uint256 indexed eId, uint8 status);
     event TicketCancelled(uint256 indexed eId, uint256 indexed tId);
@@ -187,6 +188,7 @@ contract EventTicketNFT is ERC721, ReentrancyGuard, Ownable {
             inp.price,
             inp.catId
         );
+
         emit EventCreated(
             eCnt,
             inp.name,
@@ -369,7 +371,6 @@ contract EventTicketNFT is ERC721, ReentrancyGuard, Ownable {
             "Not authorized"
         );
         require(checkTs[tId] > 0, "Not checked in");
-
         checkTs[tId] = 0;
         emit CheckInRemoved(eId, tId);
     }
@@ -746,7 +747,7 @@ contract EventTicketNFT is ERC721, ReentrancyGuard, Ownable {
                 }
             }
             tByOwn[to].push(tokenId);
-        }
+        }        
         return super._update(to, tokenId, auth);
     }
 
@@ -767,10 +768,12 @@ contract EventTicketNFT is ERC721, ReentrancyGuard, Ownable {
         if (v == 0) return "0";
         uint256 t = v;
         uint256 d;
+        
         while (t != 0) {
             d++;
             t /= 10;
         }
+
         bytes memory b = new bytes(d);
         while (v != 0) {
             b[--d] = bytes1(uint8(48 + (v % 10)));
