@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.29;
+pragma solidity ^0.8.30;
 
 import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
@@ -274,10 +274,14 @@ contract EventTicketNFT is ERC721, ReentrancyGuard, Ownable {
         require(bytes(inp.email).length > 0, "Email required");
         require(bytes(inp.phone).length > 0, "Phone required");
 
-        uint256[] storage uTix = tByOwn[msg.sender];
+        uint256[] memory uTix = tByOwn[msg.sender];
         for (uint256 i = 0; i < uTix.length; i++) {
             uint256 existingTId = uTix[i];
-            if (tToE[existingTId] == inp.eId && !tCancel[existingTId]) {
+            if (
+                tToE[existingTId] == inp.eId &&
+                ownerOf(existingTId) == msg.sender &&
+                !tCancel[existingTId]
+            ) {
                 revert("Already owns ticket");
             }
         }
@@ -300,7 +304,7 @@ contract EventTicketNFT is ERC721, ReentrancyGuard, Ownable {
         uint256 tId = ++tIdCnt;
         _safeMint(msg.sender, tId);
         tToE[tId] = inp.eId;
-        uTix.push(tId);
+        tByOwn[msg.sender].push(tId);
         e.sold++;
         attInfo[tId] = AttInfo(inp.name, inp.gender, inp.email, inp.phone);
         emit TicketMinted(
@@ -726,6 +730,26 @@ contract EventTicketNFT is ERC721, ReentrancyGuard, Ownable {
         return tots;
     }
 
+    function _update(address to, uint256 tokenId, address auth)
+        internal
+        override
+        returns (address)
+    {
+        address from = _ownerOf(tokenId);
+        if (from != address(0) && to != from) {
+            uint256[] storage fromTix = tByOwn[from];
+            for (uint256 i = 0; i < fromTix.length; i++) {
+                if (fromTix[i] == tokenId) {
+                    fromTix[i] = fromTix[fromTix.length - 1];
+                    fromTix.pop();
+                    break;
+                }
+            }
+            tByOwn[to].push(tokenId);
+        }
+        return super._update(to, tokenId, auth);
+    }
+
     function _addressToString(address a) private pure returns (string memory) {
         bytes memory alp = "0123456789abcdef";
         bytes memory s = new bytes(42);
@@ -753,31 +777,6 @@ contract EventTicketNFT is ERC721, ReentrancyGuard, Ownable {
             v /= 10;
         }
         return string(b);
-    }
-
-    function _update(
-        address to,
-        uint256 tId,
-        address auth
-    ) internal override returns (address) {
-        address from = super._update(to, tId, auth);
-
-        if (from != address(0)) {
-            uint256[] storage fTix = tByOwn[from];
-            for (uint256 i = 0; i < fTix.length; i++) {
-                if (fTix[i] == tId) {
-                    fTix[i] = fTix[fTix.length - 1];
-                    fTix.pop();
-                    break;
-                }
-            }
-        }
-
-        if (to != address(0)) {
-            tByOwn[to].push(tId);
-        }
-
-        return from;
     }
 
     function renounceOwnership() public view override onlyOwner {
