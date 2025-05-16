@@ -83,7 +83,7 @@ contract MultisigWallet is ReentrancyGuard {
             _requiredSignatures > 0 && _requiredSignatures <= _owners.length,
             "Invalid number of required signatures"
         );
-        require(_nativeTokenAmount <= 200000000000000000, "Amount exceeds 0.2");
+        require(_nativeTokenAmount <= 100000000000000000, "Amount exceeds 0.1");
         bool isValidRecipient = false;
         for (uint256 i = 0; i < _owners.length; i++) {
             if (_owners[i] == _recipientWallet) {
@@ -292,6 +292,7 @@ contract MultisigWallet is ReentrancyGuard {
             _newOwner.code.length == 0,
             "New owner cannot be a smart contract"
         );
+        require(owners.length < 10, "Max 10 owners allowed");
         uint256 txIndex = transactions.length;
         transactions.push();
         Transaction storage newTx = transactions[txIndex];
@@ -334,6 +335,10 @@ contract MultisigWallet is ReentrancyGuard {
             "Not enough confirmations"
         );
         require(!isOwner[transaction.to], "Address is already an owner");
+        require(
+            transaction.to.code.length == 0,
+            "New owner cannot be a smart contract"
+        );
         isOwner[transaction.to] = true;
         owners.push(transaction.to);
         transaction.executed = true;
@@ -475,6 +480,10 @@ contract MultisigWallet is ReentrancyGuard {
     function setRecipientWallet(address _recipient) public onlyOwner {
         require(_recipient != address(0), "Invalid recipient address");
         require(isOwner[_recipient], "Recipient must be an owner");
+        require(
+            _recipient.code.length == 0,
+            "Recipient cannot be a smart contract"
+        );
         recipientWallet = _recipient;
     }
 
