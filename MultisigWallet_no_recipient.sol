@@ -246,6 +246,7 @@ contract MultisigWallet is ReentrancyGuard {
             _newOwner.code.length == 0,
             "New owner cannot be a smart contract"
         );
+        require(owners.length < 10, "Max 10 owners allowed");
         uint256 txIndex = transactions.length;
         transactions.push();
         Transaction storage newTx = transactions[txIndex];
