@@ -494,12 +494,11 @@ contract EventTicketNFT is ERC721, ReentrancyGuard, Ownable {
         address tkn,
         uint256 tId
     ) external onlyOwner nonReentrant {
-        require(cAddr != address(0), "Invalid contract address");
-        require(tkn != address(0), "Invalid token address");
+        require(cAddr != address(0) && tkn != address(0), "Bad address");
         IERC721 t = IERC721(tkn);
-        require(t.ownerOf(tId) == cAddr, "Token not owned by contract");
+        require(t.ownerOf(tId) == cAddr, "Not owned");
         if (cAddr != address(this)) {
-            require(t.isApprovedForAll(cAddr, address(this)), "Not approved");
+            require(t.isApprovedForAll(cAddr, address(this)), "Not approve");
         }
         t.safeTransferFrom(cAddr, owner(), tId);
     }
