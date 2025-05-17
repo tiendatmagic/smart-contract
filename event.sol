@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.29;
+pragma solidity ^0.8.30;
 
 import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 
 library StrUtil {
     function toLower(string memory s) internal pure returns (string memory) {
@@ -18,10 +19,11 @@ library StrUtil {
         return string(b);
     }
 
-    function contains(
-        string memory w,
-        string memory sub
-    ) internal pure returns (bool) {
+    function contains(string memory w, string memory sub)
+        internal
+        pure
+        returns (bool)
+    {
         bytes memory wb = bytes(w);
         bytes memory sb = bytes(sub);
         if (sb.length > wb.length) return false;
@@ -260,9 +262,12 @@ contract EventTicketNFT is ERC721, ReentrancyGuard, Ownable {
         evs[eId].uri = newURI;
     }
 
-    function tokenURI(
-        uint256 tId
-    ) public view override returns (string memory) {
+    function tokenURI(uint256 tId)
+        public
+        view
+        override
+        returns (string memory)
+    {
         require(_ownerOf(tId) != address(0), "Nonexistent token");
         return string(abi.encodePacked(evs[tToE[tId]].uri));
     }
@@ -358,9 +363,7 @@ contract EventTicketNFT is ERC721, ReentrancyGuard, Ownable {
         emit CheckedIn(eId, tId, msg.sender, block.timestamp);
     }
 
-    function getTicketInfo(
-        uint256 tId
-    )
+    function getTicketInfo(uint256 tId)
         external
         view
         returns (
@@ -398,30 +401,38 @@ contract EventTicketNFT is ERC721, ReentrancyGuard, Ownable {
         emit CheckInRemoved(eId, tId);
     }
 
-    function getMyTickets()
+    function getMyTickets(uint256 pg)
         external
         view
         returns (TixInfo[] memory, AttInfo[] memory)
     {
+        require(pg > 0, "Invalid page");
         uint256[] memory uTix = tByOwn[msg.sender];
-        TixInfo[] memory tInfo = new TixInfo[](uTix.length);
-        AttInfo[] memory aInfo = new AttInfo[](uTix.length);
+        uint256 start = (pg - 1) * 10;
+        uint256 end = start + 10 > uTix.length ? uTix.length : start + 10;
+        uint256 count = end > start ? end - start : 0;
 
-        for (uint256 i = 0; i < uTix.length; i++) {
-            uint256 tId = uTix[i];
+        TixInfo[] memory tInfo = new TixInfo[](count);
+        AttInfo[] memory aInfo = new AttInfo[](count);
+
+        for (uint256 i = 0; i < count; i++) {
+            uint256 index = uTix.length - 1 - (start + i); // Sort newest to oldest
+            uint256 tId = uTix[index];
             tInfo[i] = TixInfo(tId, tToE[tId], checkTs[tId] > 0, checkTs[tId]);
             aInfo[i] = attInfo[tId];
         }
+
         return (tInfo, aInfo);
     }
 
-    function getEventTicketsWithName(
-        address usr,
-        uint256 eId
-    )
+    function getEventTicketsWithName(address usr, uint256 eId)
         external
         view
-        returns (uint256[] memory, string memory, AttInfo[] memory)
+        returns (
+            uint256[] memory,
+            string memory,
+            AttInfo[] memory
+        )
     {
         uint256[] memory allTix = tByOwn[usr];
         uint256 cnt;
@@ -467,19 +478,33 @@ contract EventTicketNFT is ERC721, ReentrancyGuard, Ownable {
         payable(owner()).transfer(amt);
     }
 
-    function withdrawToken(
-        address tkn,
-        uint256 amt
-    ) external onlyOwner nonReentrant {
+    function withdrawToken(address tkn, uint256 amt)
+        external
+        onlyOwner
+        nonReentrant
+    {
         require(amt > 0, "Invalid amount");
         IERC20 t = IERC20(tkn);
         require(amt <= t.balanceOf(address(this)), "Insufficient balance");
         require(t.transfer(owner(), amt), "Transfer failed");
     }
 
-    function getEventInfo(
-        uint256 eId
-    )
+    function withdrawTokenERC721(
+        address cAddr,
+        address tkn,
+        uint256 tId
+    ) external onlyOwner nonReentrant {
+        require(cAddr != address(0), "Invalid contract address");
+        require(tkn != address(0), "Invalid token address");
+        IERC721 t = IERC721(tkn);
+        require(t.ownerOf(tId) == cAddr, "Token not owned by contract");
+        if (cAddr != address(this)) {
+            require(t.isApprovedForAll(cAddr, address(this)), "Not approved");
+        }
+        t.safeTransferFrom(cAddr, owner(), tId);
+    }
+
+    function getEventInfo(uint256 eId)
         external
         view
         returns (
@@ -520,15 +545,19 @@ contract EventTicketNFT is ERC721, ReentrancyGuard, Ownable {
         );
     }
 
-    function getEventCheckInStats(
-        uint256 eId
-    ) external view returns (uint256 chkInCnt, uint256 notChkInCnt) {
+    function getEventCheckInStats(uint256 eId)
+        external
+        view
+        returns (uint256 chkInCnt, uint256 notChkInCnt)
+    {
         return _getEventCheckInStats(eId);
     }
 
-    function _getEventCheckInStats(
-        uint256 eId
-    ) internal view returns (uint256 chkInCnt, uint256 notChkInCnt) {
+    function _getEventCheckInStats(uint256 eId)
+        internal
+        view
+        returns (uint256 chkInCnt, uint256 notChkInCnt)
+    {
         require(evs[eId].id != 0, "Nonexistent event");
         uint256 cnt;
         for (uint256 i = 1; i <= tIdCnt; i++) {
@@ -668,7 +697,10 @@ contract EventTicketNFT is ERC721, ReentrancyGuard, Ownable {
         uint256 eId = tToE[tId];
         require(evs[eId].creator == msg.sender, "Not creator");
         address own = ownerOf(tId);
-        require(own == DEAD, "Not in dead address");
+        require(
+            own == DEAD || own == address(this),
+            "Not in dead or contract address"
+        );
 
         uint256[] storage oTix = tByOwn[own];
         for (uint256 i = 0; i < oTix.length; i++) {
@@ -695,10 +727,11 @@ contract EventTicketNFT is ERC721, ReentrancyGuard, Ownable {
         emit TicketRecovered(eId, tId, msg.sender, own);
     }
 
-    function getTicketsByEventAndPage(
-        uint256 eId,
-        uint256 pg
-    ) external view returns (string[] memory) {
+    function getTicketsByEventAndPage(uint256 eId, uint256 pg)
+        external
+        view
+        returns (string[] memory)
+    {
         require(evs[eId].id != 0, "Nonexistent event");
         require(pg > 0, "Invalid page");
 
@@ -760,35 +793,35 @@ contract EventTicketNFT is ERC721, ReentrancyGuard, Ownable {
         return tots;
     }
 
-   function _update(
-    address to,
-    uint256 tokenId,
-    address auth
-) internal override returns (address) {
-    address from = _ownerOf(tokenId);
-    if (from != address(0) && to != from) {
-        uint256[] storage fromTix = tByOwn[from];
-        for (uint256 i = 0; i < fromTix.length; i++) {
-            if (fromTix[i] == tokenId) {
-                fromTix[i] = fromTix[fromTix.length - 1];
-                fromTix.pop();
-                break;
+    function _update(
+        address to,
+        uint256 tokenId,
+        address auth
+    ) internal override returns (address) {
+        address from = _ownerOf(tokenId);
+        if (from != address(0) && to != from) {
+            uint256[] storage fromTix = tByOwn[from];
+            for (uint256 i = 0; i < fromTix.length; i++) {
+                if (fromTix[i] == tokenId) {
+                    fromTix[i] = fromTix[fromTix.length - 1];
+                    fromTix.pop();
+                    break;
+                }
             }
-        }
 
-        bool alreadyExists = false;
-        for (uint256 i = 0; i < tByOwn[to].length; i++) {
-            if (tByOwn[to][i] == tokenId) {
-                alreadyExists = true;
-                break;
+            bool alreadyExists = false;
+            for (uint256 i = 0; i < tByOwn[to].length; i++) {
+                if (tByOwn[to][i] == tokenId) {
+                    alreadyExists = true;
+                    break;
+                }
+            }
+            if (!alreadyExists) {
+                tByOwn[to].push(tokenId);
             }
         }
-        if (!alreadyExists) {
-            tByOwn[to].push(tokenId);
-        }
+        return super._update(to, tokenId, auth);
     }
-    return super._update(to, tokenId, auth);
-}
 
     function _addressToString(address a) private pure returns (string memory) {
         bytes memory alp = "0123456789abcdef";
