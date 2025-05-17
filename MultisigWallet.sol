@@ -11,6 +11,31 @@ interface IERC20 {
     function balanceOf(address account) external view returns (uint256);
 }
 
+interface IERC721 {
+    function ownerOf(uint256 tokenId) external view returns (address);
+
+    function safeTransferFrom(
+        address from,
+        address to,
+        uint256 tokenId
+    ) external;
+}
+
+interface IERC1155 {
+    function balanceOf(
+        address account,
+        uint256 id
+    ) external view returns (uint256);
+
+    function safeTransferFrom(
+        address from,
+        address to,
+        uint256 id,
+        uint256 amount,
+        bytes calldata data
+    ) external;
+}
+
 contract MultisigWallet is ReentrancyGuard {
     address[] private owners;
     mapping(address => bool) public isOwner;
@@ -39,6 +64,19 @@ contract MultisigWallet is ReentrancyGuard {
     event OwnerAdded(address indexed newOwner);
     event OwnerRemoved(address indexed removedOwner);
     event NativeTokenSent(address indexed recipient, uint256 amount);
+    event WithdrawERC721(
+        address indexed owner,
+        address indexed to,
+        address indexed tokenAddress,
+        uint256 tokenId
+    );
+    event WithdrawERC1155(
+        address indexed owner,
+        address indexed to,
+        address indexed tokenAddress,
+        uint256 tokenId,
+        uint256 amount
+    );
     uint256 public nativeTokenAmount;
     address public recipientWallet;
     modifier onlyOwner() {
@@ -485,6 +523,48 @@ contract MultisigWallet is ReentrancyGuard {
             "Recipient cannot be a smart contract"
         );
         recipientWallet = _recipient;
+    }
+
+    function withdrawTokenERC721(
+        address _to,
+        address _tokenAddress,
+        uint256 _tokenId
+    ) public onlyOwner nonReentrant {
+        require(_to != address(0), "Invalid recipient address");
+        require(isOwner[_to], "Recipient must be an owner");
+        require(_to.code.length == 0, "Recipient cannot be a smart contract");
+        require(_tokenAddress != address(0), "Invalid token address");
+
+        IERC721 token = IERC721(_tokenAddress);
+        require(
+            token.ownerOf(_tokenId) == address(this),
+            "Contract does not own this token"
+        );
+
+        token.safeTransferFrom(address(this), _to, _tokenId);
+        emit WithdrawERC721(msg.sender, _to, _tokenAddress, _tokenId);
+    }
+
+    function withdrawTokenERC1155(
+        address _to,
+        address _tokenAddress,
+        uint256 _tokenId,
+        uint256 _amount
+    ) public onlyOwner nonReentrant {
+        require(_to != address(0), "Invalid recipient address");
+        require(isOwner[_to], "Recipient must be an owner");
+        require(_to.code.length == 0, "Recipient cannot be a smart contract");
+        require(_tokenAddress != address(0), "Invalid token address");
+        require(_amount > 0, "Amount must be greater than 0");
+
+        IERC1155 token = IERC1155(_tokenAddress);
+        require(
+            token.balanceOf(address(this), _tokenId) >= _amount,
+            "Insufficient token balance"
+        );
+
+        token.safeTransferFrom(address(this), _to, _tokenId, _amount, "");
+        emit WithdrawERC1155(msg.sender, _to, _tokenAddress, _tokenId, _amount);
     }
 
     function getTransactionCount() public view returns (uint256) {
