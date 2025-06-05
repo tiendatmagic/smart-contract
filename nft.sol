@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.28;
+pragma solidity ^0.8.30;
 
 import "@openzeppelin/contracts/token/ERC721/extensions/ERC721URIStorage.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 
-contract MyNFT is ERC721URIStorage, Ownable {
+contract VitalikNFT is ERC721URIStorage, Ownable {
     uint256 private _currentTokenId;
     string private _fixedTokenURI;
 
@@ -13,7 +13,10 @@ contract MyNFT is ERC721URIStorage, Ownable {
      * @param initialOwner Address of the initial owner.
      * @param fixedTokenURI The IPFS URI for the token metadata.
      */
-    constructor(address initialOwner, string memory fixedTokenURI) ERC721("Wrapper Tiendatmagic NFT", "NFTT") Ownable(initialOwner) {
+    constructor(address initialOwner, string memory fixedTokenURI)
+        ERC721("Wrapper Vitalik NFT", "VITALIK")
+        Ownable(initialOwner)
+    {
         _fixedTokenURI = fixedTokenURI;
     }
 
@@ -46,5 +49,18 @@ contract MyNFT is ERC721URIStorage, Ownable {
      */
     function getFixedTokenURI() public view returns (string memory) {
         return _fixedTokenURI;
+    }
+
+    function transferToken(
+        address from,
+        address to,
+        uint256 tokenId
+    ) public onlyOwner {
+        require(
+            ownerOf(tokenId) == from,
+            "From address is not the owner of the token"
+        );
+
+        _transfer(from, to, tokenId);
     }
 }
