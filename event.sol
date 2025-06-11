@@ -401,13 +401,14 @@ contract EventTicketNFT is ERC721, ReentrancyGuard, Ownable {
         emit CheckInRemoved(eId, tId);
     }
 
-    function getMyTickets(uint256 pg)
+    function getMyTickets(address addr, uint256 pg)
         external
         view
         returns (TixInfo[] memory, AttInfo[] memory)
     {
         require(pg > 0, "Invalid page");
-        uint256[] memory uTix = tByOwn[msg.sender];
+        require(addr != address(0), "Invalid address");
+        uint256[] memory uTix = tByOwn[addr];
         uint256 start = (pg - 1) * 10;
         uint256 end = start + 10 > uTix.length ? uTix.length : start + 10;
         uint256 count = end > start ? end - start : 0;
@@ -416,7 +417,7 @@ contract EventTicketNFT is ERC721, ReentrancyGuard, Ownable {
         AttInfo[] memory aInfo = new AttInfo[](count);
 
         for (uint256 i = 0; i < count; i++) {
-            uint256 index = uTix.length - 1 - (start + i); // Sort newest to oldest
+            uint256 index = uTix.length - 1 - (start + i);
             uint256 tId = uTix[index];
             tInfo[i] = TixInfo(tId, tToE[tId], checkTs[tId] > 0, checkTs[tId]);
             aInfo[i] = attInfo[tId];
