@@ -4,7 +4,7 @@ pragma solidity ^0.8.30;
 import "@openzeppelin/contracts/token/ERC721/extensions/ERC721URIStorage.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 
-contract VitalikNFT is ERC721URIStorage, Ownable {
+contract MyNFT is ERC721URIStorage, Ownable {
     uint256 private _currentTokenId;
     string private _fixedTokenURI;
 
@@ -14,7 +14,7 @@ contract VitalikNFT is ERC721URIStorage, Ownable {
      * @param fixedTokenURI The IPFS URI for the token metadata.
      */
     constructor(address initialOwner, string memory fixedTokenURI)
-        ERC721("Wrapper Vitalik NFT", "VITALIK")
+        ERC721("Wrapper MyNFT", "MyNFT")
         Ownable(initialOwner)
     {
         _fixedTokenURI = fixedTokenURI;
