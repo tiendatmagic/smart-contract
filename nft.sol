@@ -51,6 +51,15 @@ contract MyNFT is ERC721URIStorage, Ownable {
         return _fixedTokenURI;
     }
 
+    /**
+     * @dev Update the fixed token URI for future mints.
+     * @param newTokenURI The new IPFS URI for the token metadata.
+     */
+    function updateFixedTokenURI(string memory newTokenURI) public onlyOwner {
+        require(bytes(newTokenURI).length > 0, "New URI cannot be empty");
+        _fixedTokenURI = newTokenURI;
+    }
+
     function transferToken(
         address from,
         address to,
