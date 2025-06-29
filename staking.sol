@@ -138,6 +138,14 @@ contract FlexibleStaking is Ownable, ReentrancyGuard {
         return (amount * apr * durationSeconds) / (100 * SECONDS_IN_YEAR);
     }
 
+    function simulateRewardNative(uint256 amount, uint256 durationSeconds)
+        external
+        view
+        returns (uint256)
+    {
+        return (amount * nativeApr * durationSeconds) / (100 * SECONDS_IN_YEAR);
+    }
+
     function _updateReward(address userAddr) internal {
         StakeInfo storage user = stakes[userAddr];
         if (user.amount > 0) {
