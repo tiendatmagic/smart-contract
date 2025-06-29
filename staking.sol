@@ -56,13 +56,21 @@ contract FlexibleStaking is Ownable, ReentrancyGuard {
     constructor(
         address _token,
         uint256 _initialAPR,
-        uint256 _initialNativeAPR
+        uint256 _initialNativeAPR,
+        uint256 _maxStakeERC20,
+        uint256 _maxStakeNative
     ) Ownable(msg.sender) {
         require(_token != address(0), "Invalid token");
+
         token = IERC20(_token);
         tokenDecimals = IERC20Metadata(_token).decimals();
         apr = _initialAPR;
         nativeApr = _initialNativeAPR;
+        maxStakeERC20 = _maxStakeERC20;
+        maxStakeNative = _maxStakeNative;
+
+        emit SetMaxStakeERC20(_maxStakeERC20);
+        emit SetMaxStakeNative(_maxStakeNative);
     }
 
     receive() external payable {
@@ -324,32 +332,35 @@ contract FlexibleStaking is Ownable, ReentrancyGuard {
     }
 
     function withdrawTokenERC721(
-        address nftAddress,
+        address tokenAddress,
         address recipient,
         uint256 tokenId
     ) external onlyOwner {
-        require(nftAddress != address(0), "Invalid NFT address");
+        require(tokenAddress != address(0), "Invalid token");
         require(recipient != address(0), "Invalid recipient");
 
-        IERC721(nftAddress).safeTransferFrom(address(this), recipient, tokenId);
+        IERC721(tokenAddress).safeTransferFrom(
+            address(this),
+            recipient,
+            tokenId
+        );
     }
 
     function withdrawTokenERC1155(
-        address nftAddress,
+        address tokenAddress,
         address recipient,
         uint256 tokenId,
-        uint256 amount,
-        bytes calldata data
+        uint256 amount
     ) external onlyOwner {
-        require(nftAddress != address(0), "Invalid NFT address");
+        require(tokenAddress != address(0), "Invalid token");
         require(recipient != address(0), "Invalid recipient");
 
-        IERC1155(nftAddress).safeTransferFrom(
+        IERC1155(tokenAddress).safeTransferFrom(
             address(this),
             recipient,
             tokenId,
             amount,
-            data
+            "" // Dùng bytes rỗng làm data mặc định
         );
     }
 
