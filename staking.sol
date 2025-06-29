@@ -56,9 +56,7 @@ contract FlexibleStaking is Ownable, ReentrancyGuard {
     constructor(
         address _token,
         uint256 _initialAPR,
-        uint256 _initialNativeAPR,
-        uint256 _maxStakeERC20,
-        uint256 _maxStakeNative
+        uint256 _initialNativeAPR
     ) Ownable(msg.sender) {
         require(_token != address(0), "Invalid token");
 
@@ -66,11 +64,6 @@ contract FlexibleStaking is Ownable, ReentrancyGuard {
         tokenDecimals = IERC20Metadata(_token).decimals();
         apr = _initialAPR;
         nativeApr = _initialNativeAPR;
-        maxStakeERC20 = _maxStakeERC20;
-        maxStakeNative = _maxStakeNative;
-
-        emit SetMaxStakeERC20(_maxStakeERC20);
-        emit SetMaxStakeNative(_maxStakeNative);
     }
 
     receive() external payable {
