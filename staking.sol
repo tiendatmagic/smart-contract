@@ -51,7 +51,11 @@ contract FlexibleStaking is Ownable, ReentrancyGuard {
     event SetMaxStakeERC20(uint256 amount);
     event SetMaxStakeNative(uint256 amount);
 
-    constructor(address _token, uint256 _initialAPR, uint256 _initialNativeAPR) Ownable(msg.sender) {
+    constructor(
+        address _token,
+        uint256 _initialAPR,
+        uint256 _initialNativeAPR
+    ) Ownable(msg.sender) {
         require(_token != address(0), "Invalid token");
         token = IERC20(_token);
         tokenDecimals = IERC20Metadata(_token).decimals();
@@ -59,13 +63,20 @@ contract FlexibleStaking is Ownable, ReentrancyGuard {
         nativeApr = _initialNativeAPR;
     }
 
+    receive() external payable {
+        emit FundNativeRewardPool(msg.sender, msg.value);
+    }
+
     function stake(uint256 _amount) external nonReentrant {
-        require(_amount >= 10 ** tokenDecimals, "Minimum stake is 1 token");
+        require(_amount >= 10**tokenDecimals, "Minimum stake is 1 token");
 
         StakeInfo storage user = stakes[msg.sender];
         _updateReward(msg.sender);
 
-        require(user.amount + _amount <= maxStakeERC20, "Exceeds ERC20 stake limit");
+        require(
+            user.amount + _amount <= maxStakeERC20,
+            "Exceeds ERC20 stake limit"
+        );
 
         token.transferFrom(msg.sender, address(this), _amount);
         user.amount += _amount;
@@ -119,7 +130,11 @@ contract FlexibleStaking is Ownable, ReentrancyGuard {
         return reward;
     }
 
-    function simulateReward(uint256 amount, uint256 durationSeconds) external view returns (uint256) {
+    function simulateReward(uint256 amount, uint256 durationSeconds)
+        external
+        view
+        returns (uint256)
+    {
         return (amount * apr * durationSeconds) / (100 * SECONDS_IN_YEAR);
     }
 
@@ -127,7 +142,8 @@ contract FlexibleStaking is Ownable, ReentrancyGuard {
         StakeInfo storage user = stakes[userAddr];
         if (user.amount > 0) {
             uint256 timeDiff = block.timestamp - user.lastUpdated;
-            uint256 reward = (user.amount * apr * timeDiff) / (100 * SECONDS_IN_YEAR);
+            uint256 reward = (user.amount * apr * timeDiff) /
+                (100 * SECONDS_IN_YEAR);
             user.rewardDebt += reward;
         }
         user.lastUpdated = block.timestamp;
@@ -139,7 +155,10 @@ contract FlexibleStaking is Ownable, ReentrancyGuard {
         StakeInfoNative storage user = stakesNative[msg.sender];
         _updateRewardNative(msg.sender);
 
-        require(user.amount + msg.value <= maxStakeNative, "Exceeds native stake limit");
+        require(
+            user.amount + msg.value <= maxStakeNative,
+            "Exceeds native stake limit"
+        );
 
         user.amount += msg.value;
         totalStakedNative += msg.value;
@@ -180,13 +199,19 @@ contract FlexibleStaking is Ownable, ReentrancyGuard {
         emit ClaimNative(msg.sender, reward);
     }
 
-    function pendingRewardNative(address userAddr) external view returns (uint256) {
+    function pendingRewardNative(address userAddr)
+        external
+        view
+        returns (uint256)
+    {
         StakeInfoNative memory user = stakesNative[userAddr];
         uint256 reward = user.rewardDebt;
 
         if (user.amount > 0) {
             uint256 timeDiff = block.timestamp - user.lastUpdated;
-            reward += (user.amount * nativeApr * timeDiff) / (100 * SECONDS_IN_YEAR);
+            reward +=
+                (user.amount * nativeApr * timeDiff) /
+                (100 * SECONDS_IN_YEAR);
         }
 
         return reward;
@@ -196,7 +221,8 @@ contract FlexibleStaking is Ownable, ReentrancyGuard {
         StakeInfoNative storage user = stakesNative[userAddr];
         if (user.amount > 0) {
             uint256 timeDiff = block.timestamp - user.lastUpdated;
-            uint256 reward = (user.amount * nativeApr * timeDiff) / (100 * SECONDS_IN_YEAR);
+            uint256 reward = (user.amount * nativeApr * timeDiff) /
+                (100 * SECONDS_IN_YEAR);
             user.rewardDebt += reward;
         }
         user.lastUpdated = block.timestamp;
@@ -239,13 +265,16 @@ contract FlexibleStaking is Ownable, ReentrancyGuard {
         emit FundNativeRewardPool(msg.sender, msg.value);
     }
 
-     function fundRewardPool(uint256 amount) external onlyOwner {
+    function fundRewardPool(uint256 amount) external onlyOwner {
         require(amount > 0, "Amount must be greater than 0");
         token.transferFrom(msg.sender, address(this), amount);
         emit FundRewardPool(msg.sender, amount);
     }
 
-    function withdrawTokenNative(address recipient, uint256 amount) external onlyOwner {
+    function withdrawTokenNative(address recipient, uint256 amount)
+        external
+        onlyOwner
+    {
         require(recipient != address(0), "Invalid recipient");
 
         uint256 balance = address(this).balance;
@@ -261,7 +290,11 @@ contract FlexibleStaking is Ownable, ReentrancyGuard {
         emit WithdrawTokenNative(recipient, amount);
     }
 
-    function withdrawAnyToken(address tokenAddress, address recipient, uint256 amount) external onlyOwner {
+    function withdrawAnyToken(
+        address tokenAddress,
+        address recipient,
+        uint256 amount
+    ) external onlyOwner {
         require(tokenAddress != address(0), "Invalid token");
         require(recipient != address(0), "Invalid recipient");
 
