@@ -33,7 +33,7 @@ contract FlexibleStaking is Ownable, ReentrancyGuard {
     uint256 public maxStakeNative;
 
     uint256 private constant SECONDS_IN_YEAR = 365 * 24 * 60 * 60;
-    uint256 public constant MIN_NATIVE_STAKE = 0.0001 ether;
+    uint256 private constant MIN_NATIVE_STAKE = 0.0001 ether;
 
     event Stake(address indexed user, uint256 amount);
     event Unstake(address indexed user, uint256 amount);
