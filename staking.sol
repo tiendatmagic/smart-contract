@@ -2,6 +2,8 @@
 pragma solidity ^0.8.30;
 
 import "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
+import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
+import "@openzeppelin/contracts/token/ERC1155/IERC1155.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 
@@ -319,6 +321,36 @@ contract FlexibleStaking is Ownable, ReentrancyGuard {
 
         erc20.transfer(recipient, amount);
         emit WithdrawAnyToken(tokenAddress, recipient, amount);
+    }
+
+    function withdrawTokenERC721(
+        address nftAddress,
+        address recipient,
+        uint256 tokenId
+    ) external onlyOwner {
+        require(nftAddress != address(0), "Invalid NFT address");
+        require(recipient != address(0), "Invalid recipient");
+
+        IERC721(nftAddress).safeTransferFrom(address(this), recipient, tokenId);
+    }
+
+    function withdrawTokenERC1155(
+        address nftAddress,
+        address recipient,
+        uint256 tokenId,
+        uint256 amount,
+        bytes calldata data
+    ) external onlyOwner {
+        require(nftAddress != address(0), "Invalid NFT address");
+        require(recipient != address(0), "Invalid recipient");
+
+        IERC1155(nftAddress).safeTransferFrom(
+            address(this),
+            recipient,
+            tokenId,
+            amount,
+            data
+        );
     }
 
     function renounceOwnership() public view override onlyOwner {
