@@ -47,6 +47,7 @@ contract FlexibleStaking is Ownable, ReentrancyGuard {
     event WithdrawAnyToken(address token, address to, uint256 amount);
     event WithdrawTokenNative(address to, uint256 amount);
     event FundNativeRewardPool(address from, uint256 amount);
+    event FundRewardPool(address from, uint256 amount);
     event SetMaxStakeERC20(uint256 amount);
     event SetMaxStakeNative(uint256 amount);
 
@@ -236,6 +237,12 @@ contract FlexibleStaking is Ownable, ReentrancyGuard {
     function fundNativeRewardPool() external payable onlyOwner {
         require(msg.value > 0, "Must send ETH");
         emit FundNativeRewardPool(msg.sender, msg.value);
+    }
+
+     function fundRewardPool(uint256 amount) external onlyOwner {
+        require(amount > 0, "Amount must be greater than 0");
+        token.transferFrom(msg.sender, address(this), amount);
+        emit FundRewardPool(msg.sender, amount);
     }
 
     function withdrawTokenNative(address recipient, uint256 amount) external onlyOwner {
