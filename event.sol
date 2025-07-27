@@ -19,11 +19,10 @@ library StrUtil {
         return string(b);
     }
 
-    function contains(string memory w, string memory sub)
-        internal
-        pure
-        returns (bool)
-    {
+    function contains(
+        string memory w,
+        string memory sub
+    ) internal pure returns (bool) {
         bytes memory wb = bytes(w);
         bytes memory sb = bytes(sub);
         if (sb.length > wb.length) return false;
@@ -262,12 +261,9 @@ contract EventTicketNFT is ERC721, ReentrancyGuard, Ownable {
         evs[eId].uri = newURI;
     }
 
-    function tokenURI(uint256 tId)
-        public
-        view
-        override
-        returns (string memory)
-    {
+    function tokenURI(
+        uint256 tId
+    ) public view override returns (string memory) {
         require(_ownerOf(tId) != address(0), "Nonexistent token");
         return string(abi.encodePacked(evs[tToE[tId]].uri));
     }
@@ -363,7 +359,9 @@ contract EventTicketNFT is ERC721, ReentrancyGuard, Ownable {
         emit CheckedIn(eId, tId, msg.sender, block.timestamp);
     }
 
-    function getTicketInfo(uint256 tId)
+    function getTicketInfo(
+        uint256 tId
+    )
         external
         view
         returns (
@@ -392,20 +390,16 @@ contract EventTicketNFT is ERC721, ReentrancyGuard, Ownable {
     function removeCheckIn(uint256 tId) external {
         require(_ownerOf(tId) != address(0), "Nonexistent token");
         uint256 eId = tToE[tId];
-        require(
-            evs[eId].creator == msg.sender || ownerOf(tId) == msg.sender,
-            "Not authorized"
-        );
+        require(evs[eId].creator == msg.sender, "Not creator");
         require(checkTs[tId] > 0, "Not checked in");
         checkTs[tId] = 0;
         emit CheckInRemoved(eId, tId);
     }
 
-    function getMyTickets(address addr, uint256 pg)
-        external
-        view
-        returns (TixInfo[] memory, AttInfo[] memory)
-    {
+    function getMyTickets(
+        address addr,
+        uint256 pg
+    ) external view returns (TixInfo[] memory, AttInfo[] memory) {
         require(pg > 0, "Invalid page");
         require(addr != address(0), "Invalid address");
         uint256[] memory uTix = tByOwn[addr];
@@ -426,14 +420,13 @@ contract EventTicketNFT is ERC721, ReentrancyGuard, Ownable {
         return (tInfo, aInfo);
     }
 
-    function getEventTicketsWithName(address usr, uint256 eId)
+    function getEventTicketsWithName(
+        address usr,
+        uint256 eId
+    )
         external
         view
-        returns (
-            uint256[] memory,
-            string memory,
-            AttInfo[] memory
-        )
+        returns (uint256[] memory, string memory, AttInfo[] memory)
     {
         uint256[] memory allTix = tByOwn[usr];
         uint256 cnt;
@@ -479,29 +472,29 @@ contract EventTicketNFT is ERC721, ReentrancyGuard, Ownable {
         payable(owner()).transfer(amt);
     }
 
-    function withdrawToken(address tkn, uint256 amt)
-        external
-        onlyOwner
-        nonReentrant
-    {
+    function withdrawToken(
+        address tkn,
+        uint256 amt
+    ) external onlyOwner nonReentrant {
         require(amt > 0, "Invalid amount");
         IERC20 t = IERC20(tkn);
         require(amt <= t.balanceOf(address(this)), "Insufficient balance");
         require(t.transfer(owner(), amt), "Transfer failed");
     }
 
-    function withdrawTokenERC721(address tkn, uint256 tId)
-        external
-        onlyOwner
-        nonReentrant
-    {
+    function withdrawTokenERC721(
+        address tkn,
+        uint256 tId
+    ) external onlyOwner nonReentrant {
         require(tkn != address(0), "Invalid token address");
         IERC721 t = IERC721(tkn);
         require(t.ownerOf(tId) == address(this), "Not owner");
         t.safeTransferFrom(address(this), owner(), tId);
     }
 
-    function getEventInfo(uint256 eId)
+    function getEventInfo(
+        uint256 eId
+    )
         external
         view
         returns (
@@ -542,19 +535,15 @@ contract EventTicketNFT is ERC721, ReentrancyGuard, Ownable {
         );
     }
 
-    function getEventCheckInStats(uint256 eId)
-        external
-        view
-        returns (uint256 chkInCnt, uint256 notChkInCnt)
-    {
+    function getEventCheckInStats(
+        uint256 eId
+    ) external view returns (uint256 chkInCnt, uint256 notChkInCnt) {
         return _getEventCheckInStats(eId);
     }
 
-    function _getEventCheckInStats(uint256 eId)
-        internal
-        view
-        returns (uint256 chkInCnt, uint256 notChkInCnt)
-    {
+    function _getEventCheckInStats(
+        uint256 eId
+    ) internal view returns (uint256 chkInCnt, uint256 notChkInCnt) {
         require(evs[eId].id != 0, "Nonexistent event");
         uint256 cnt;
         for (uint256 i = 1; i <= tIdCnt; i++) {
@@ -724,11 +713,10 @@ contract EventTicketNFT is ERC721, ReentrancyGuard, Ownable {
         emit TicketRecovered(eId, tId, msg.sender, own);
     }
 
-    function getTicketsByEventAndPage(uint256 eId, uint256 pg)
-        external
-        view
-        returns (string[] memory)
-    {
+    function getTicketsByEventAndPage(
+        uint256 eId,
+        uint256 pg
+    ) external view returns (string[] memory) {
         require(evs[eId].id != 0, "Nonexistent event");
         require(pg > 0, "Invalid page");
 
